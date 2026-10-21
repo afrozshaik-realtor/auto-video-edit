@@ -34,7 +34,8 @@ const SAVE_TIP =
   'Ask Claude to save key files to its outputs folder after each pass. The sandbox can reset during long gaps. Download them and add them to the reel’s project folder.';
 
 export const workflow: Workflow = {
-  version: 1,
+  // v2: added the B-roll steps after Pass 02.
+  version: 2,
   startsEditingStepId: 'setup',
   steps: [
     {
@@ -104,6 +105,38 @@ export const workflow: Workflow = {
       ],
     },
     {
+      id: 'broll-plan',
+      title: 'B-roll: plan and gather shots',
+      who: 'Both',
+      required: true,
+      instructions:
+        'Ask Claude for a B-roll shot list matched to your words. Approve it, then gather the shots it marks as stock or your own footage. Put them in the reel’s broll folder and upload them to the Claude chat. Claude builds the graphic shots itself.',
+      doneWhen: 'The shot list is approved and every stock or own-footage clip is uploaded to the chat.',
+      prompts: ['broll-plan'],
+      tools: ['claude', 'pexels', 'pixabay', 'canva', 'drive'],
+      stuck: [
+        'Search stock sites in portrait (vertical) orientation and download 1080p, not 4K. Trim each clip to under 6 seconds so uploads stay small.',
+        'Claude’s sandbox usually can’t download from stock sites, so download the clips yourself and upload them to the chat.',
+        'Reels created before B-roll was added have no broll folder. Make one inside the reel folder in Drive.',
+        SAVE_TIP,
+      ],
+    },
+    {
+      id: 'broll-mix',
+      title: 'B-roll: build and mix',
+      who: 'Both',
+      required: true,
+      instructions:
+        'Have Claude build the graphic shots and cut all the B-roll in on its trigger words. Watch it through and check each shot matches what you’re saying.',
+      doneWhen: 'Every shot lands on its word, the hook stays on your face, and B-roll is under 40% of the reel.',
+      prompts: ['broll-mix'],
+      tools: ['claude'],
+      stuck: [
+        'If rendering is slow, ask Claude to build and check one shot at a time, then join them.',
+        SAVE_TIP,
+      ],
+    },
+    {
       id: 'pass-03',
       title: 'Pass 03: captions',
       who: 'Both',
@@ -143,7 +176,10 @@ export const workflow: Workflow = {
       required: true,
       instructions: 'Watch the render and send notes until it’s right. Tap a note to copy it, fill in any [brackets], and paste it into Claude.',
       doneWhen: 'You’d post it as it is.',
-      prompts: ['dn-outline', 'dn-face', 'dn-busy', 'dn-late', 'dn-captions-fast', 'dn-hook', 'dn-brand', 'dn-range'],
+      prompts: [
+        'dn-outline', 'dn-face', 'dn-busy', 'dn-late', 'dn-captions-fast', 'dn-hook', 'dn-brand', 'dn-range',
+        'dn-broll-match', 'dn-broll-much', 'dn-broll-hook', 'dn-broll-swap',
+      ],
       tools: ['claude'],
     },
     {

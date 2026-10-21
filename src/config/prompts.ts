@@ -1,8 +1,9 @@
 // Prompts the team copies into Claude / ChatGPT.
 //
-// PLACEHOLDERS: the setup, pass, tighten-the-cut and director-note prompts
+// PLACEHOLDERS: the setup, pass, tighten-the-cut and kit director-note prompts
 // below are working drafts. Replace each `text` with the exact wording from
-// the 5-Pass Reel Edit Kit and set `draft: false`.
+// the 5-Pass Reel Edit Kit and set `draft: false`. Keep the setup prompt's
+// mention of the B-roll pass, which isn't part of the kit.
 //
 // Templates can use these variables, filled in per reel:
 //   {{business_name}} {{style_rules}} {{reel_title}} {{tags}}
@@ -35,7 +36,7 @@ export const prompts: Prompt[] = [
     text: `You are my video editor. I've uploaded a raw talking-head clip for a vertical reel for {{business_name}}.
 Reel title: {{reel_title}}
 
-We'll edit it in five passes: transcribe, cut-out, captions, motion, sound. Do one pass at a time, show me what you made, and wait for my OK before the next pass. Work in code with the tools in your sandbox. After each pass, save the key files to your outputs folder.
+We'll edit it in five passes: transcribe, cut-out, captions, motion, sound. Between the cut-out and captions there's also a B-roll pass, where you plan, build and cut in B-roll. Do one pass at a time, show me what you made, and wait for my OK before the next pass. Work in code with the tools in your sandbox. After each pass, save the key files to your outputs folder.
 
 Follow these style rules for every pass:
 
@@ -65,6 +66,50 @@ Transcribe the clip with word-level timestamps and save them as words.json. Show
     draft: true,
     text: `Pass 02 — Cut-out.
 Separate me from the background with a video matting model and save the matte. I'll check hair edges: there must be no outline and no holes. Show me three frames (start, middle, end) composited over a solid colour so I can check the edges.`,
+  },
+  // B-roll (app-authored, not from the kit). Runs after Pass 02 so the cut-out
+  // can sit in front of B-roll, and before Pass 03 so captions fit the final cut.
+  {
+    id: 'broll-plan',
+    label: 'B-roll shot list',
+    kind: 'block',
+    draft: false,
+    text: `B-roll — shot list. Don't build anything yet.
+This reel is for {{business_name}}. Title: {{reel_title}}. Topics: {{tags}}.
+
+Read words.json and plan B-roll that shows what I'm saying. For each shot give:
+1. Trigger word and timecode (the shot starts on that word)
+2. Length (2–4 s)
+3. What it shows, in one plain sentence
+4. Layout: full-screen cutaway, split screen, picture-in-picture, or behind my cut-out
+5. Source, one of:
+   - BUILD: you make it in code (animated stat or chart, text card, simple illustration, or a mock screen such as an email, form, calculator, map or floor plan)
+   - STOCK: I download it free from Pexels or Pixabay. Give me 2–3 exact search terms, portrait orientation
+   - OWN: footage I already have (describe what to film or find)
+
+Rules:
+- Nothing in the first 1.5 s: the hook stays on my face.
+- B-roll is no more than 40% of the reel. Leave at least 1.5 s of my face between shots.
+- Prefer BUILD when it explains the point better than stock would.
+- No logos, brands or people's faces we don't have rights to.
+
+Show it as a table, then wait. I'll upload the STOCK and OWN clips with their shot numbers in the file names.`,
+  },
+  {
+    id: 'broll-mix',
+    label: 'B-roll build and mix',
+    kind: 'block',
+    draft: false,
+    text: `B-roll — build and mix.
+Use the approved shot list. I've uploaded the STOCK and OWN clips, numbered by shot.
+
+1. Build every BUILD shot in code at 1080x1920, 30 fps, using our style rules (fonts, brand colours, safe area).
+2. Fit each STOCK and OWN clip: crop to 9:16 without stretching, trim to its length, match brightness and colour to my footage. Mute its audio.
+3. Cut each shot in on its trigger word with a hard cut or a 4-frame dissolve. My voice keeps playing underneath.
+4. For "behind my cut-out" shots, put the B-roll behind me using the Pass 02 matte.
+5. For split screen and picture-in-picture, keep my face fully visible and inside the safe area.
+
+Render a preview, list each shot with its in and out timecodes, and save the B-roll files and the new edit to your outputs folder. Then wait for my notes.`,
   },
   {
     id: 'pass-03',
@@ -99,13 +144,17 @@ Add sound design that follows the style rules: hit on the hook, taps on clicks, 
   { id: 'dn-hook', label: 'Hook harder', kind: 'chip', draft: true, text: 'Make the hook hit harder: a bigger key word, a sharper sound hit, and a faster first scene in the first 2 seconds.' },
   { id: 'dn-brand', label: 'Use brand colors', kind: 'chip', draft: true, text: 'Use our brand colors for all graphics and key words: [hex].' },
   { id: 'dn-range', label: 'Only re-render a range', kind: 'chip', draft: true, text: 'Only re-render from [start] to [end]. Keep everything else exactly as it is.' },
+  { id: 'dn-broll-match', label: 'B-roll doesn’t match', kind: 'chip', draft: false, text: 'The B-roll at "[word]" doesn’t match what I’m saying. Replace it with a shot that shows [what it should show].' },
+  { id: 'dn-broll-much', label: 'Too much B-roll', kind: 'chip', draft: false, text: 'There’s too much B-roll. Cut the weakest shots so I’m on screen more, and keep B-roll under 30% of the reel.' },
+  { id: 'dn-broll-hook', label: 'Keep B-roll off the hook', kind: 'chip', draft: false, text: 'Keep all B-roll out of the hook. Stay on my face for the first 2 seconds.' },
+  { id: 'dn-broll-swap', label: 'Swap a B-roll shot', kind: 'chip', draft: false, text: 'Swap the B-roll shot at [time] for [new shot]. Keep its timing and everything else the same.' },
   // App-authored prompts (not from the kit).
   {
     id: 'save-outputs',
     label: 'Save files to outputs',
     kind: 'block',
     draft: false,
-    text: `Save these to your outputs folder so I can download them: the final MP4 (1080x1920), a cover frame as a PNG, words.json, the matte, and any project files you'd need to re-render.`,
+    text: `Save these to your outputs folder so I can download them: the final MP4 (1080x1920), a cover frame as a PNG, words.json, the matte, the B-roll shots you built, and any project files you'd need to re-render.`,
   },
   {
     id: 'caption',

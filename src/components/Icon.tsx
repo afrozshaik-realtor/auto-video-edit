@@ -17,7 +17,8 @@ const PATHS: Record<string, string> = {
   chat: 'M4 5h16v11H9l-5 4z',
   brush: 'M14 4l6 6-8 8H6v-6zM4 20h4',
   scissors: 'M6 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8.5 7.5L20 19M8.5 16.5L20 5',
-  camera: 'M4 4h16v16H4zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM17 7h.01',
+  film: 'M4 4h16v16H4zM8 4v16M16 4v16M4 8h4M4 12h4M4 16h4M16 8h4M16 12h4M16 16h4',
+  camera:'M4 4h16v16H4zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM17 7h.01',
 };
 
 export function Icon({ name, label, size = 18 }: { name: string; label?: string; size?: number }) {

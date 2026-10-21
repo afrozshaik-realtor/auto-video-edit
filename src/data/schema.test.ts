@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderPrompt, getPrompt } from '../config/prompts';
+import { prompts, renderPrompt, getPrompt } from '../config/prompts';
 import { reelFolderName, slugify } from './naming';
 import {
   TABS,
@@ -62,6 +62,12 @@ describe('sheet rows', () => {
 });
 
 describe('prompts', () => {
+  it('leaves no template variables unfilled in any prompt', () => {
+    const ctx = { businessName: 'AM Builders', styleRules: '# Rules', reelTitle: 'T', tags: ['a'] };
+    for (const p of prompts) expect(renderPrompt(p, ctx), p.id).not.toMatch(/\{\{/);
+    expect(renderPrompt(getPrompt('broll-plan')!, ctx)).toContain('AM Builders');
+  });
+
   it('fills in business, rules, title and tags', () => {
     const text = renderPrompt(getPrompt('setup')!, {
       businessName: 'Dr Cyber',

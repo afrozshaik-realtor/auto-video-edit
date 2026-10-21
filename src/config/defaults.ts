@@ -37,6 +37,6 @@ export const DRIVE_FOLDER_NAMES = {
 } as const;
 
 /** Subfolders created inside every reel folder. */
-export const REEL_SUBFOLDERS = ['raw', 'project', 'final'] as const;
+export const REEL_SUBFOLDERS = ['raw', 'broll', 'project', 'final'] as const;
 
 export const SHEET_TITLE = 'Reel Tracker';

@@ -32,11 +32,22 @@ function checklist(doneIds: string[]): ReelChecklist {
 const requiredIds = workflow.steps.filter((s) => s.required).map((s) => s.id);
 
 describe('workflow config', () => {
-  it('has 15 steps with unique ids, 14 required', () => {
-    expect(workflow.steps).toHaveLength(15);
-    expect(new Set(workflow.steps.map((s) => s.id)).size).toBe(15);
-    expect(requiredIds).toHaveLength(14);
+  it('has 17 steps with unique ids, 16 required', () => {
+    expect(workflow.steps).toHaveLength(17);
+    expect(new Set(workflow.steps.map((s) => s.id)).size).toBe(17);
+    expect(requiredIds).toHaveLength(16);
     expect(workflow.steps.find((s) => !s.required)?.id).toBe('polish');
+  });
+
+  it('puts the required B-roll steps between Pass 02 and Pass 03', () => {
+    const ids = workflow.steps.map((s) => s.id);
+    expect(ids.slice(ids.indexOf('pass-02'), ids.indexOf('pass-03') + 1)).toEqual([
+      'pass-02',
+      'broll-plan',
+      'broll-mix',
+      'pass-03',
+    ]);
+    expect(requiredIds).toEqual(expect.arrayContaining(['broll-plan', 'broll-mix']));
   });
 
   it('only references prompts and tools that exist', () => {
@@ -52,8 +63,8 @@ describe('workflow config', () => {
 
 describe('requiredProgress', () => {
   it('counts only required steps', () => {
-    expect(requiredProgress(workflow, checklist(['shoot', 'polish']))).toMatchObject({ done: 1, total: 14 });
-    expect(requiredProgress(workflow, undefined)).toMatchObject({ done: 0, total: 14 });
+    expect(requiredProgress(workflow, checklist(['shoot', 'polish']))).toMatchObject({ done: 1, total: 16 });
+    expect(requiredProgress(workflow, undefined)).toMatchObject({ done: 0, total: 16 });
     expect(requiredProgress(workflow, checklist(requiredIds)).missing).toEqual([]);
   });
 

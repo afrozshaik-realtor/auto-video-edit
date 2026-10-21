@@ -15,6 +15,8 @@ export const tools: Tool[] = [
   { id: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com', icon: 'chat', label: 'Open ChatGPT' },
   { id: 'canva', name: 'Canva', url: 'https://www.canva.com', icon: 'brush', label: 'Open Canva' },
   { id: 'capcut', name: 'CapCut', url: 'https://www.capcut.com', icon: 'scissors', label: 'Open CapCut' },
+  { id: 'pexels', name: 'Pexels', url: 'https://www.pexels.com/videos/', icon: 'film', label: 'Find free stock on Pexels' },
+  { id: 'pixabay', name: 'Pixabay', url: 'https://pixabay.com/videos/', icon: 'film', label: 'Find free stock on Pixabay' },
   { id: 'instagram', name: 'Instagram', url: 'https://www.instagram.com', icon: 'camera', label: 'Open Instagram' },
   { id: 'drive', name: 'Google Drive', url: null, icon: 'folder', label: 'Open reel folder in Drive' },
 ];
