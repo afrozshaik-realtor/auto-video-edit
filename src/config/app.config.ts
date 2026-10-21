@@ -3,7 +3,7 @@
 // the owner has shared the Sheet and folder with.
 // Never put API keys or client secrets in this file.
 
-export const APP_VERSION = '0.1.0';
+export const APP_VERSION = '0.2.0';
 
 export const appConfig = {
   googleClientId: '56837720110-3j8qfag3t3onqclcbqj0qptld4kcd629.apps.googleusercontent.com',

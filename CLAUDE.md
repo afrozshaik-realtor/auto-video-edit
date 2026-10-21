@@ -54,8 +54,9 @@ Reels/
   (e.g. `2026-10-21_TCE_first-time-buyer-mistakes`).
 - The reel folder starts in Raw. Moving a reel between stages moves its whole folder
   (Drive API: update `parents`). Never copy, never delete.
-- Inside the reel folder, the app creates: `raw/`, `project/` (words.json, matte,
-  renders from Claude), `final/` (final MP4 + cover frame).
+- Inside the reel folder, the app creates: `raw/`, `broll/` (stock and own-footage
+  B-roll clips), `project/` (words.json, matte, renders from Claude), `final/`
+  (final MP4 + cover frame).
 
 ### Stage rules
 - **Raw**: reel created, raw clip uploaded.
@@ -102,21 +103,37 @@ optional prompt text (with a Copy button), tool buttons, and a "done when" line.
 | 4 | Setup: new Claude chat (Opus 5.5, code execution on), upload clip, paste setup prompt + this business's style rules | Both | Claude | Setup prompt merged with the business's style rules |
 | 5 | Pass 01 Transcribe; fix misheard words in the table; tighten the cut | Both | Claude | Pass 01 + "Tighten the cut" |
 | 6 | Pass 02 Cut-out; check hair edges, no outline, no holes | Both | Claude | Pass 02 |
-| 7 | Pass 03 Captions; approve key words | Both | Claude | Pass 03 |
-| 8 | Pass 04 Motion; approve the scene plan before build | Both | Claude | Pass 04 |
-| 9 | Pass 05 Sound; listen on a phone | Both | Claude | Pass 05 |
-| 10 | Direct: send notes until it's right | Both | Claude | Director note chips (one copy button each) |
-| 11 | Save final MP4, cover frame and project files to the reel folder | You | Open reel folder (Drive) | Ask Claude to save to outputs |
-| 12 | Optional polish (manual fixes, brand assets) | You | CapCut, Canva | — |
-| 13 | Phone check: sound on and off, nothing under Instagram buttons, loudness OK | You | — | — |
-| 14 | Write caption and hashtags | Both | ChatGPT, Claude | Caption prompt using business + reel title + tags |
-| 15 | Post and paste the posted URL | You | Instagram | — |
+| 7 | B-roll plan: Claude writes a shot list matched to words.json (trigger word, timecode, layout, source: BUILD / STOCK / OWN); approve it, gather stock and own clips into `broll/`, upload to the chat | Both | Claude, Pexels, Pixabay, Canva, Open reel folder (Drive) | B-roll shot list |
+| 8 | B-roll mix: Claude builds the BUILD shots in code and cuts all B-roll in on its trigger words | Both | Claude | B-roll build and mix |
+| 9 | Pass 03 Captions; approve key words | Both | Claude | Pass 03 |
+| 10 | Pass 04 Motion; approve the scene plan before build | Both | Claude | Pass 04 |
+| 11 | Pass 05 Sound; listen on a phone | Both | Claude | Pass 05 |
+| 12 | Direct: send notes until it's right | Both | Claude | Director note chips (one copy button each) |
+| 13 | Save final MP4, cover frame and project files to the reel folder | You | Open reel folder (Drive) | Ask Claude to save to outputs |
+| 14 | Optional polish (manual fixes, brand assets) | You | CapCut, Canva | — |
+| 15 | Phone check: sound on and off, nothing under Instagram buttons, loudness OK | You | — | — |
+| 16 | Write caption and hashtags | Both | ChatGPT, Claude | Caption prompt using business + reel title + tags |
+| 17 | Post and paste the posted URL | You | Instagram | — |
 
-Required steps: all except 12. Store the exact prompts from the kit in
+Required steps: all except 14 (16 required). Store the exact prompts from the kit in
 `src/config/prompts.ts` (setup, five passes, tighten-the-cut, director notes).
+The B-roll prompts are not from the kit; the setup prompt must mention the B-roll pass.
 Director note chips: outline looks fake; graphic covers face; too much on screen;
 graphic lands late (with [word] placeholder); captions too fast; hook harder;
-use brand colors [hex]; only re-render a time range.
+use brand colors [hex]; only re-render a time range; B-roll doesn't match at [word];
+too much B-roll; keep B-roll off the hook; swap the B-roll shot at [time].
+
+B-roll rules (in the B-roll prompts):
+- Sources are free only: BUILD (Claude makes it in code: animated stats, charts, text
+  cards, simple illustrations, mock screens), STOCK (Pexels / Pixabay, portrait), OWN
+  (the team's footage). No paid AI video generators.
+- Nothing in the first 1.5 s (the hook stays on the face). B-roll at most 40% of the
+  reel, 2–4 s per shot, at least 1.5 s of face between shots. Each shot starts on its
+  trigger word.
+- Layouts: full-screen cutaway (voice continues), split screen, picture-in-picture,
+  behind the cut-out (uses the Pass 02 matte).
+- The B-roll pass runs after Pass 02 (needs the matte) and before Pass 03 (captions
+  are placed on the final cut).
 
 Step troubleshooting tips (show under a "Stuck?" disclosure):
 - Pass 01: if a speech model won't download, ask Claude to use a Whisper or Parakeet
@@ -131,14 +148,15 @@ Step troubleshooting tips (show under a "Stuck?" disclosure):
 `src/config/tools.ts` — list of { id, name, url, icon }. Defaults:
 Claude (https://claude.ai/new), ChatGPT (https://chatgpt.com), Canva
 (https://www.canva.com), CapCut (https://www.capcut.com), Instagram
-(https://www.instagram.com), Google Drive (reel folder link built from folder id).
+(https://www.instagram.com), Pexels (https://www.pexels.com/videos/), Pixabay
+(https://pixabay.com/videos/), Google Drive (reel folder link built from folder id).
 All open in a new tab.
 
 ## Screens
 
 1. **Board** (home): three lanes — Raw, Working, Completed — styled like tracks on an
    editing timeline, with each reel as a clip on its track. Clip shows title,
-   business color, tags, assignee, progress (x/14 required steps). Completed lane
+   business color, tags, assignee, progress (x/16 required steps). Completed lane
    collapsed by default, showing the 10 most recent.
 2. **Filters** (on Board): business, tags (multi-select, match any/all), stage,
    assignee, text search. Filters reflected in the URL so a filtered view can be
