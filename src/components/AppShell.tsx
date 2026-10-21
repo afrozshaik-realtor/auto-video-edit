@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
+import { APP_VERSION } from '../config/app.config';
 import { Wordmark } from '../screens/SignInScreen';
 import { useAuth } from '../state/auth';
 import { useTheme, type ThemePref } from '../state/theme';
@@ -60,6 +61,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <button type="button" className="btn btn-secondary btn-small" onClick={signOut}>
                 Sign out
               </button>
+              <p className="muted small account-version">Reel Studio {APP_VERSION}</p>
             </div>
           </details>
         </div>

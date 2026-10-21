@@ -564,6 +564,14 @@ select.input {
   z-index: 30;
 }
 
+.account-menu p {
+  margin: 0 0 10px;
+}
+.account-menu .account-version {
+  margin: 10px 0 0;
+  font-size: 12px;
+}
+
 .banner {
   display: flex;
   flex-wrap: wrap;
