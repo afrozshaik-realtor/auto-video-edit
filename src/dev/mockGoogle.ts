@@ -7,7 +7,7 @@
 //   ...&user=sam                           sign in as a different teammate
 //   ...&reset                              wipe the fake Drive
 
-import { DRIVE_FOLDER_NAMES, SEED_BUSINESSES } from '../config/defaults';
+import { DRIVE_FOLDER_NAMES, REEL_SUBFOLDERS, SEED_BUSINESSES } from '../config/defaults';
 import { workflow } from '../config/workflow';
 import { SCHEMA_VERSION, TABS, businessToRecord, recordToRow } from '../data/schema';
 
@@ -158,14 +158,14 @@ function seed() {
     ['Phishing red flags in 30 seconds', 'drc', 'email, tips', 'working', 'sam@example.com', 7],
     ['Walkout basement before and after', 'amb', 'basements, before-after', 'working', 'afroz@example.com', 11],
     ['What closing costs really include', 'tce', 'buyers, money', 'working', 'afroz@example.com', 4],
-    ['Password managers explained', 'drc', 'passwords, tips', 'completed', 'sam@example.com', 15],
-    ['Pre-approval vs pre-qualification', 'tce', 'buyers, money', 'completed', 'afroz@example.com', 15],
+    ['Password managers explained', 'drc', 'passwords, tips', 'completed', 'sam@example.com', workflow.steps.length],
+    ['Pre-approval vs pre-qualification', 'tce', 'buyers, money', 'completed', 'afroz@example.com', workflow.steps.length],
   ];
   demo.forEach(([title, biz, tags, stage, assignee, doneCount], i) => {
     const id = `r-demo${i}`;
     const date = new Date(2026, 9, 10 + i);
     const folder = mk(`2026-10-${10 + i}_${biz.toUpperCase()}_${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, folders[stage]);
-    for (const sub of ['raw', 'project', 'final']) mk(sub, folder);
+    for (const sub of REEL_SUBFOLDERS) mk(sub, folder);
     const iso = date.toISOString();
     reels.push([
       id, title, biz, tags, stage, assignee, 'afroz@example.com', iso, iso, folder, '',
@@ -196,6 +196,7 @@ export function installMockGoogle() {
   }
   if (params.has('seed') && !localStorage.getItem(STORE_KEY)) seed();
 
+  (window as { __reelStudioMock?: boolean }).__reelStudioMock = true;
   const realFetch = window.fetch.bind(window);
   window.fetch = async (input, init) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);

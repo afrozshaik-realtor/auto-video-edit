@@ -31,7 +31,9 @@ const LOCAL_IDS_KEY = 'reel-studio.ids';
 /** IDs from app.config.ts, or (before they're pasted in) the ones saved on this device by setup. */
 export function getIds(): AppIds | null {
   const c = appConfig;
-  if (c.sheetId && c.driveFolders.raw && c.driveFolders.working && c.driveFolders.completed) {
+  // The dev-only fake Google (?mock) has its own sheet, so skip the real IDs there.
+  const mock = import.meta.env.DEV && (window as { __reelStudioMock?: boolean }).__reelStudioMock;
+  if (!mock && c.sheetId && c.driveFolders.raw && c.driveFolders.working && c.driveFolders.completed) {
     return { sheetId: c.sheetId, driveFolders: { ...c.driveFolders } };
   }
   try {
