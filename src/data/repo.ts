@@ -73,6 +73,8 @@ export interface AppData {
   businesses: Business[];
   tags: Tag[];
   schemaVersion: number;
+  /** Meta tab key/values (schema_version, ai_last_check, …). */
+  meta: Record<string, string>;
 }
 
 export async function loadAll(ids: AppIds): Promise<AppData> {
@@ -81,9 +83,17 @@ export async function loadAll(ids: AppIds): Promise<AppData> {
   const checklists = indexChecklist(rowsToRecords(tabs.Checklist).records.map(checklistFromRecord));
   const businesses = rowsToRecords(tabs.Businesses).records.map(businessFromRecord).filter((b) => b.id);
   const tags = rowsToRecords(tabs.Tags).records.map(tagFromRecord).filter((t) => t.tag);
-  const meta = rowsToRecords(tabs.Meta).records;
-  const schemaVersion = Number(meta.find((m) => m.key === 'schema_version')?.value ?? 0);
-  return { reels, checklists, businesses, tags, schemaVersion };
+  const meta = Object.fromEntries(rowsToRecords(tabs.Meta).records.filter((m) => m.key).map((m) => [m.key, m.value ?? '']));
+  const schemaVersion = Number(meta.schema_version ?? 0);
+  return { reels, checklists, businesses, tags, schemaVersion, meta };
+}
+
+/** Set one Meta key (adds the row if it isn't there). */
+export async function setMeta(ids: AppIds, key: string, value: string) {
+  const rows = await sheets.readTab(ids.sheetId, 'Meta');
+  const index = rows.findIndex((r, i) => i > 0 && r[0] === key);
+  if (index > 0) await sheets.updateRow(ids.sheetId, 'Meta', index + 1, [key, value]);
+  else await sheets.appendRows(ids.sheetId, 'Meta', [[key, value]]);
 }
 
 // ---------- Helpers ----------

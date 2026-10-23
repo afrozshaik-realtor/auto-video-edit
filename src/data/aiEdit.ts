@@ -106,7 +106,7 @@ ${input.styleRules.trim()}
 ## Environment
 - Linux, CPU only, with internet access. ffmpeg, ffprobe and Python 3 with faster-whisper, onnxruntime, opencv-python-headless, numpy and pillow are installed. Install anything else you need with pip.
 - ${stock}
-- At the start of each step below, overwrite ${f.status} with the step's name only (for example "Pass 02: cut-out"). The team sees it in Reel Studio.
+- At the start of each step below, overwrite ${f.status} with that step's heading exactly as written below (for example "Pass 02: cut-out"). During long steps, add a rough percentage for that step and update it every few minutes (for example "Pass 02: cut-out 40%"). The team sees this as a progress bar in Reel Studio.
 - Save work as you go in ${f.projectDir}/ so a crash loses as little as possible.
 - Finish within about 3 hours. Process frames in chunks and prefer fast settings.
 

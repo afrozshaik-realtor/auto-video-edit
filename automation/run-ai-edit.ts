@@ -24,6 +24,7 @@ import {
   waitingForClip,
 } from '../src/data/aiEdit';
 import { runMigrations } from '../src/data/migrations';
+import { AI_HEARTBEAT_KEY } from '../src/data/aiProgress';
 import * as repo from '../src/data/repo';
 import { SCHEMA_VERSION } from '../src/data/schema';
 import type { Reel } from '../src/data/types';
@@ -461,6 +462,8 @@ async function main() {
     log(`migrating sheet from schema ${data.schemaVersion} to ${SCHEMA_VERSION}`);
     await runMigrations(ids(), data.schemaVersion);
   }
+  // Heartbeat: the app shows "AI editor last checked …" from this.
+  await repo.setMeta(ids(), AI_HEARTBEAT_KEY, new Date().toISOString()).catch(() => log('heartbeat failed'));
 
   if (check) {
     const work = await nextReel();
