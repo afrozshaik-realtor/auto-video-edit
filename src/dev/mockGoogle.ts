@@ -223,13 +223,16 @@ function seed() {
   const reelHeaders = v1 ? TABS.Reels.slice(0, 14) : [...TABS.Reels];
   const reels: string[][] = [reelHeaders];
   const checklist: string[][] = [[...TABS.Checklist]];
+  // A tiny 9:16 image so the thumbnail preview has something to show.
+  const demoThumbB64 = 'iVBORw0KGgoAAAANSUhEUgAAAFoAAACgCAIAAAADw+wqAAAACXBIWXMAAAABAAAAAQBPJcTWAAABWUlEQVR4nO3XsQ3CQBQFwbNEEVANVUCRVIGrcRtEIC+h7cDBTPSTS1Yvuen9uA6+Lr8LOf5ZR8gRcoQcIUfIEXKEHCFHyBFyhBwhR8gRcoQcIUfIEXKEHCFHyBFyhBwhR8gRcoQcIUfIEXKEHCFHyBFyhBwhR8gRcoQcIUfIEXKEHCFHyBFyHJfj/lrG+czP2+a31hFyhBwhR8gRcoQcIUfIEXKEHCFHyHFcjnnH3/GcrCPkCDlCjpAj5Ag5Qo6QI+QIOUKOkCPkCDlCjpAj5Ag5Qo6QI+QIOUKOkCPkCDlCjpAj5Ag5Qo6QI+QIOUKOkCPkCDlCjpAj5Ag5Qo6QI+QIOUKOkCPkCDlCjpAj5Ag5Qo6QI+QIOUKOkCPkCDlCjpAj5Ag5Qo6QI+QIOUKOkCPkCDlCjpAj5Ag5Qo6QI+QIOUKOkCPkCDlCjpAj5Ag5Qo6QI+QIOcbaB16XB9uj+7pmAAAAAElFTkSuQmCC';
+  const thumbPrompt = 'Keep the person from the reference photo exactly. Vertical 9:16 cover, headline "Permit first" in bold white on orange.';
   const caption = 'Three things nobody tells you before your first offer.\n\n#realestate #firsttimebuyer #homebuying';
   // [title, business, tags, stage, assignee, steps done, ai_status, ai_detail]
   const demo: [string, string, string, 'raw' | 'working' | 'completed', string, number, string, string][] = [
     ['First-time buyer mistakes', 'tce', 'buyers, tips', 'raw', 'afroz@example.com', 1, '', ''],
     ['Is your basement legal? Permits 101', 'amb', 'permits, basements', 'raw', 'sam@example.com', 0, '', ''],
     ['Phishing red flags in 30 seconds', 'drc', 'email, tips', 'working', 'sam@example.com', 2, 'running', 'Pass 02: cut-out'],
-    ['Walkout basement before and after', 'amb', 'basements, before-after', 'working', 'afroz@example.com', 4, 'done', 'Finished edit 1'],
+    ['Walkout basement before and after', 'amb', 'basements, before-after', 'working', 'afroz@example.com', 5, 'done', 'Finished edit 1'],
     ['What closing costs really include', 'tce', 'buyers, money', 'working', 'afroz@example.com', 2, 'failed', 'The AI editor ran out of turns.'],
     ['Password managers explained', 'drc', 'passwords, tips', 'completed', 'sam@example.com', workflow.steps.length, 'done', 'Finished edit 1'],
     ['Pre-approval vs pre-qualification', 'tce', 'buyers, money', 'completed', 'afroz@example.com', workflow.steps.length, 'done', 'Finished edit 2'],
@@ -246,7 +249,19 @@ function seed() {
       finished ? 'https://drive.google.com/file/d/demo/view' : '',
       stage === 'completed' ? 'https://www.instagram.com/reel/demo' : '', stage === 'completed' ? '2026-10-18' : '', '',
     ];
-    if (!v1) row.push(aiStatus, aiDetail, aiStatus ? new Date().toISOString() : '', finished ? '1' : '', '', finished ? caption : '');
+    if (!v1) {
+      // Demo 3 has a finished thumbnail; demo 5 shows the "no OpenAI key yet" failure.
+      let thumb = ['', '', '', '', ''];
+      const finalFolder = Object.values(s.files).find((f) => f.parents[0] === folder && f.name === 'final');
+      if (i === 3 && finalFolder) {
+        const tid = newId(s, 'fil_');
+        s.files[tid] = { id: tid, name: 'thumbnail.png', mimeType: 'image/png', parents: [finalFolder.id], content: demoThumbB64 };
+        thumb = [`https://drive.google.com/file/d/${tid}/view`, 'done', 'Made thumbnail.png', thumbPrompt, ''];
+      } else if (i === 5) {
+        thumb = ['', 'failed', 'No OpenAI API key yet. Add the OPENAI_API_KEY secret, then click “Make a new thumbnail”.', thumbPrompt, ''];
+      }
+      row.push(aiStatus, aiDetail, aiStatus ? new Date().toISOString() : '', finished ? '1' : '', '', finished ? caption : '', ...thumb);
+    }
     reels.push(row);
     workflow.steps.slice(0, doneCount).forEach((step) => checklist.push([id, step.id, 'TRUE', step.auto ? 'Reel Studio AI' : assignee, iso, '']));
   });
