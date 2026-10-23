@@ -17,9 +17,41 @@ function friendlyMessage(status: number, apiMessage: string): string {
   return apiMessage || `Google request failed (${status}).`;
 }
 
+type TokenProvider = () => string | Promise<string>;
+
+// In the browser: the signed-in person's token. The AI edit job swaps in its own.
+let tokenProvider: TokenProvider = getAccessToken;
+
+export function setTokenProvider(provider: TokenProvider) {
+  tokenProvider = provider;
+}
+
+export function getToken(): Promise<string> {
+  return Promise.resolve(tokenProvider());
+}
+
+/** fetch() against a Google REST API, returning the raw Response (for downloads). */
+export async function googleFetchRaw(url: string, init: RequestInit = {}): Promise<Response> {
+  const token = await getToken();
+  const headers = new Headers(init.headers);
+  headers.set('Authorization', `Bearer ${token}`);
+  let res: Response;
+  try {
+    res = await fetch(url, { ...init, headers });
+  } catch {
+    throw new GoogleApiError('Couldn’t reach Google. Check your connection and try again.', 0);
+  }
+  if (res.status === 401) {
+    markExpired();
+    throw new AuthExpiredError();
+  }
+  if (!res.ok) throw new GoogleApiError(friendlyMessage(res.status, await res.text().catch(() => '')), res.status);
+  return res;
+}
+
 /** fetch() against a Google REST API with the signed-in user's token. */
 export async function googleFetch<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const token = getAccessToken();
+  const token = await getToken();
   const headers = new Headers(init.headers);
   headers.set('Authorization', `Bearer ${token}`);
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
