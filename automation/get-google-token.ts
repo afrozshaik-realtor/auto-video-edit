@@ -9,6 +9,7 @@
 
 import { createServer } from 'node:http';
 import { createInterface } from 'node:readline/promises';
+import { appConfig } from '../src/config/app.config';
 import { SCOPES } from '../src/services/google/auth';
 
 async function ask(question: string): Promise<string> {
@@ -20,6 +21,13 @@ async function ask(question: string): Promise<string> {
 
 async function main() {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || (await ask('Desktop OAuth client ID: '));
+  if (clientId === appConfig.googleClientId) {
+    // The website's Web client only allows registered redirect URIs, so Google
+    // would answer "Error 400: redirect_uri_mismatch".
+    throw new Error(
+      'That is the website’s Web application client. Create a separate “Desktop app” client in Google Cloud (Google Auth Platform → Clients → Create client → Desktop app) and use its ID and secret.',
+    );
+  }
   const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || (await ask('Desktop OAuth client secret: '));
 
   const code = await new Promise<{ code: string; redirectUri: string }>((resolve, reject) => {
