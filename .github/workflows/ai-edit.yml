@@ -1,0 +1,54 @@
+name: AI edit
+
+# Checks the Reel Tracker for reels with a new raw clip (or a re-run request)
+# and edits them with Claude Code. Logs are public on this repo, so the job
+# prints reel ids and statuses only, never titles, transcripts or file contents.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One edit job at a time; a new check waits rather than cancelling a running edit.
+concurrency:
+  group: ai-edit
+  cancel-in-progress: false
+
+jobs:
+  edit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Check for reels to edit
+        id: check
+        run: npx tsx automation/run-ai-edit.ts --check
+
+      - name: Install video tools
+        if: steps.check.outputs.has_work == 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg > /dev/null
+          pip install --quiet faster-whisper onnxruntime opencv-python-headless numpy pillow
+          npm install -g @anthropic-ai/claude-code --silent
+
+      - name: Edit reels
+        if: steps.check.outputs.has_work == 'true'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+        run: npx tsx automation/run-ai-edit.ts
