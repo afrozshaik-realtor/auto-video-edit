@@ -26,13 +26,13 @@ const requiredIds = workflow.steps.filter((s) => s.required).map((s) => s.id);
 const step = (id: string) => workflow.steps.find((s) => s.id === id)!;
 
 describe('workflow config', () => {
-  it('has 7 steps in order, 6 required, with the AI steps automatic', () => {
+  it('has 8 steps in order, 7 required, with the AI steps automatic', () => {
     expect(workflow.steps.map((s) => s.id)).toEqual([
-      'shoot', 'upload', 'ai-edit', 'ai-caption', 'polish', 'phone-check', 'post',
+      'shoot', 'upload', 'ai-edit', 'ai-caption', 'ai-thumbnail', 'polish', 'phone-check', 'post',
     ]);
-    expect(requiredIds).toHaveLength(6);
+    expect(requiredIds).toHaveLength(7);
     expect(workflow.steps.filter((s) => !s.required).map((s) => s.id)).toEqual(['polish']);
-    expect(workflow.steps.filter((s) => s.auto).map((s) => s.id)).toEqual(['ai-edit', 'ai-caption']);
+    expect(workflow.steps.filter((s) => s.auto).map((s) => s.id)).toEqual(['ai-edit', 'ai-caption', 'ai-thumbnail']);
   });
 
   it('only references prompts and tools that exist', () => {
@@ -55,8 +55,8 @@ describe('workflow config', () => {
 
 describe('requiredProgress', () => {
   it('counts only required steps', () => {
-    expect(requiredProgress(workflow, checklist(['shoot', 'polish']))).toMatchObject({ done: 1, total: 6 });
-    expect(requiredProgress(workflow, undefined)).toMatchObject({ done: 0, total: 6 });
+    expect(requiredProgress(workflow, checklist(['shoot', 'polish']))).toMatchObject({ done: 1, total: 7 });
+    expect(requiredProgress(workflow, undefined)).toMatchObject({ done: 0, total: 7 });
     expect(requiredProgress(workflow, checklist(requiredIds)).missing).toEqual([]);
   });
 

@@ -22,6 +22,8 @@ interface DataState {
   moveReelBack: (reel: Reel, to: Reel['stage']) => Promise<void>;
   /** Start (or re-run) the automated AI edit, with optional notes. */
   queueAiEdit: (reel: Reel, notes: string) => Promise<void>;
+  /** Ask for a new AI thumbnail only, with optional notes. */
+  queueThumbnail: (reel: Reel, notes: string) => Promise<void>;
 }
 
 const DataContext = createContext<DataState | null>(null);
@@ -84,7 +86,8 @@ export function DataProvider({ ids, children }: { ids: AppIds; children: ReactNo
   }, [refresh]);
 
   // Keep AI progress fresh without anyone reloading.
-  const aiActive = data?.reels.some((r) => r.aiStatus === 'queued' || r.aiStatus === 'running') ?? false;
+  const busy = (s: Reel['aiStatus']) => s === 'queued' || s === 'running';
+  const aiActive = data?.reels.some((r) => busy(r.aiStatus) || busy(r.thumbStatus)) ?? false;
   useEffect(() => {
     if (!aiActive || expired) return;
     const t = window.setInterval(() => {
@@ -192,6 +195,13 @@ export function DataProvider({ ids, children }: { ids: AppIds; children: ReactNo
           () => patchReelLocal({ ...reel, aiStatus: 'queued', aiNotes: notes, aiDetail: 'Waiting for the AI editor to start' }),
           async () => {
             patchReelLocal(await repo.queueAiEdit(ids, user, reel, notes));
+          },
+        ),
+      queueThumbnail: (reel, notes) =>
+        run(
+          () => patchReelLocal({ ...reel, thumbStatus: 'queued', thumbNotes: notes, thumbDetail: 'Waiting for the AI editor to start' }),
+          async () => {
+            patchReelLocal(await repo.queueThumbnail(ids, user, reel, notes));
           },
         ),
     }),

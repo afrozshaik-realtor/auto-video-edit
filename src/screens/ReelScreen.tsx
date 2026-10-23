@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { workflow } from '../config/workflow';
-import { AiEditPanel, aiStatusLine, CaptionPanel, ReviewPanel } from '../components/AiPanels';
+import { AiEditPanel, aiStatusLine, CaptionPanel, ReviewPanel, ThumbnailPanel } from '../components/AiPanels';
 import { BusinessChip } from '../components/BusinessChip';
 import { shortName } from '../components/ClipCard';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -17,7 +17,8 @@ import { useToast } from '../state/toast';
 
 export function ReelScreen() {
   const { id = '' } = useParams();
-  const { data, loading, setStepDone, saveStepNote, updateReel, completeReel, moveReelBack, queueAiEdit } = useData();
+  const { data, loading, setStepDone, saveStepNote, updateReel, completeReel, moveReelBack, queueAiEdit, queueThumbnail } =
+    useData();
   const { notify } = useToast();
   const reel = data?.reels.find((r) => r.id === id);
   const checklist = data?.checklists.get(id);
@@ -162,6 +163,14 @@ export function ReelScreen() {
                       <AiEditPanel reel={reel} onQueue={(notes) => queueAiEdit(reel, notes)} />
                     ) : step.panel === 'ai-caption' ? (
                       <CaptionPanel reel={reel} />
+                    ) : step.panel === 'ai-thumbnail' ? (
+                      <ThumbnailPanel
+                        reel={reel}
+                        onQueue={async (notes) => {
+                          await queueThumbnail(reel, notes);
+                          notify('New thumbnail queued. It usually takes a few minutes.');
+                        }}
+                      />
                     ) : step.panel === 'review' ? (
                       <ReviewPanel
                         reel={reel}

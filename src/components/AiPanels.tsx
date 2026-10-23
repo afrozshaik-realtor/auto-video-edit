@@ -1,8 +1,8 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { getPrompt, renderPrompt, type PromptContext } from '../config/prompts';
 import type { WorkflowStep } from '../config/workflow';
 import type { Reel } from '../data/types';
-import { folderUrl } from '../services/google/drive';
+import { downloadFile, folderUrl } from '../services/google/drive';
 import { ConfirmDialog } from './ConfirmDialog';
 import { CopyButton } from './CopyButton';
 import { Icon } from './Icon';
@@ -29,8 +29,136 @@ export function aiStatusLine(reel: Reel): string | null {
     case 'failed':
       return 'AI edit failed';
     default:
+      if (reel.thumbStatus === 'queued' || reel.thumbStatus === 'running') return 'Making a new thumbnail';
+      if (reel.thumbStatus === 'failed') return 'Thumbnail failed';
       return null;
   }
+}
+
+/** Drive file id from a https://drive.google.com/file/d/<id>/view link. */
+export function driveFileId(link: string): string | null {
+  return /\/file\/d\/([^/?#]+)/.exec(link)?.[1] ?? null;
+}
+
+/** Shows a Drive image using the viewer's own Google sign-in (Drive files aren't public). */
+function DriveImage({ fileId, alt }: { fileId: string; alt: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let url: string | null = null;
+    let cancelled = false;
+    setFailed(false);
+    downloadFile(fileId)
+      .then((buf) => {
+        if (cancelled) return;
+        url = URL.createObjectURL(new Blob([buf], { type: 'image/png' }));
+        setSrc(url);
+      })
+      .catch(() => !cancelled && setFailed(true));
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [fileId]);
+  if (failed) return <p className="muted small">Couldn’t load the preview. Open it in Drive instead.</p>;
+  if (!src) return <div className="thumb-preview thumb-loading" aria-label="Loading thumbnail" />;
+  return <img className="thumb-preview" src={src} alt={alt} />;
+}
+
+export function ThumbnailPanel({ reel, onQueue }: { reel: Reel; onQueue: (notes: string) => Promise<void> }) {
+  const id = useId();
+  const [notes, setNotes] = useState('');
+  const [busy, setBusy] = useState(false);
+  const editing = reel.aiStatus === 'queued' || reel.aiStatus === 'running';
+  const fileId = driveFileId(reel.thumbnailLink);
+
+  const queue = async () => {
+    setBusy(true);
+    try {
+      await onQueue(notes);
+      setNotes('');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const redo = (
+    <details className="stuck" open={reel.thumbStatus === 'failed' || undefined}>
+      <summary>{reel.thumbStatus === 'failed' ? 'Try again' : 'Not right? Make a new one'}</summary>
+      <div className="thumb-redo">
+        <label className="field-label" htmlFor={`${id}-notes`}>
+          What should change? <span className="optional">optional</span>
+        </label>
+        <textarea
+          id={`${id}-notes`}
+          className="input"
+          rows={3}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="For example: headline “Permit first”, darker background, me smiling."
+        />
+        <button type="button" className="btn btn-secondary btn-small" onClick={queue} disabled={busy}>
+          {busy ? 'Queuing…' : 'Make a new thumbnail'}
+        </button>
+      </div>
+    </details>
+  );
+
+  let body;
+  if (reel.thumbStatus === 'queued') {
+    body = <p>Queued. The AI editor checks for work every {AI_CHECK_EVERY}; a thumbnail takes about a minute.</p>;
+  } else if (reel.thumbStatus === 'running') {
+    body = (
+      <p className="ai-now">
+        <span className="ai-dot" aria-hidden="true" />
+        {reel.thumbDetail || 'Making the thumbnail'}
+      </p>
+    );
+  } else if (reel.thumbStatus === 'done' || (reel.thumbnailLink && reel.thumbStatus !== 'failed')) {
+    body = (
+      <>
+        {fileId && <DriveImage fileId={fileId} alt={`Thumbnail for ${reel.title}`} />}
+        <div className="tool-row">
+          <a className="btn btn-secondary btn-small" href={reel.thumbnailLink} target="_blank" rel="noopener noreferrer">
+            <Icon name="external" size={16} />
+            Open thumbnail in Drive
+          </a>
+        </div>
+        {redo}
+      </>
+    );
+  } else if (reel.thumbStatus === 'failed') {
+    body = (
+      <>
+        <p className="form-error">{reel.thumbDetail || 'Making the thumbnail failed.'}</p>
+        {redo}
+      </>
+    );
+  } else {
+    body = <p>{editing ? 'Made as soon as the AI edit finishes.' : 'Made after the AI edit.'}</p>;
+  }
+
+  return (
+    <>
+      <div className="ai-panel" aria-live="polite">
+        {body}
+      </div>
+      {reel.thumbPrompt && (
+        <details className="stuck">
+          <summary>Image prompt Claude wrote</summary>
+          <div className="prompt">
+            <div className="prompt-head">
+              <span className="muted small">Paste it into ChatGPT with a photo of you to try it by hand.</span>
+              <CopyButton text={reel.thumbPrompt} label="Copy prompt" />
+            </div>
+            <pre className="prompt-text" tabIndex={0} aria-label="Thumbnail image prompt">
+              {reel.thumbPrompt}
+            </pre>
+          </div>
+        </details>
+      )}
+    </>
+  );
 }
 
 export function AiEditPanel({ reel, onQueue }: { reel: Reel; onQueue: (notes: string) => Promise<void> }) {

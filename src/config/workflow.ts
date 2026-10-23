@@ -5,7 +5,7 @@
 export type Who = 'Claude' | 'You' | 'Both';
 
 /** Special content shown inside a step, driven by the reel's AI status. */
-export type StepPanel = 'ai-edit' | 'ai-caption' | 'review';
+export type StepPanel = 'ai-edit' | 'ai-caption' | 'ai-thumbnail' | 'review';
 
 export interface WorkflowStep {
   id: string;
@@ -41,7 +41,8 @@ export const AI_EDITOR_NAME = 'Reel Studio AI';
 export const workflow: Workflow = {
   // v1: 15 steps, each kit pass ticked by hand. v2: added two B-roll steps.
   // v3: the AI editor runs every pass (trim to save) and the caption automatically.
-  version: 3,
+  // v4: added the AI thumbnail (Claude writes the prompt, OpenAI's image model draws it).
+  version: 4,
   startsEditingStepId: 'ai-edit',
   steps: [
     {
@@ -90,6 +91,17 @@ export const workflow: Workflow = {
       doneWhen: 'The caption is ready to copy.',
     },
     {
+      id: 'ai-thumbnail',
+      title: 'AI thumbnail',
+      who: 'Claude',
+      required: true,
+      auto: true,
+      panel: 'ai-thumbnail',
+      instructions:
+        'Claude picks the best frame of you and writes the image prompt, then ChatGPT’s image model makes a 9:16 cover with a short headline in the brand colours. It’s saved to the reel’s final folder.',
+      doneWhen: 'The thumbnail is in the final folder and you’re happy with it.',
+    },
+    {
       id: 'polish',
       title: 'Polish (optional)',
       who: 'You',
@@ -117,7 +129,8 @@ export const workflow: Workflow = {
       title: 'Post it',
       who: 'You',
       required: true,
-      instructions: 'Copy the caption, post the reel on Instagram, then paste the posted URL below.',
+      instructions:
+        'Copy the caption, post the reel on Instagram with the thumbnail as its cover, then paste the posted URL below.',
       doneWhen: 'The reel is live and its URL is saved here.',
       tools: ['instagram'],
       field: 'postedUrl',
