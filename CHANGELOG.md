@@ -3,6 +3,13 @@
 All notable changes to Reel Studio. The version shown in the app comes from
 `APP_VERSION` in `src/config/app.config.ts`.
 
+## 0.4.2 — 2026-10-23
+
+### Added
+- Privacy Policy (`/privacy.html`) and Terms of Service (`/terms.html`) pages. Google
+  needs both before the app can be published. They're linked from the sign-in screen
+  and the account menu.
+
 ## 0.4.1 — 2026-10-23
 
 ### Added

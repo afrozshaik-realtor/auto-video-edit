@@ -5,3 +5,9 @@ dist
 .vite
 coverage
 .claude/
+
+# Local secrets: never commit
+keys.txt
+*.key
+.env
+.env.*

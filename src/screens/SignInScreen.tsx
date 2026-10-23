@@ -35,11 +35,21 @@ export function SignInScreen() {
           </p>
         )}
         <p className="fine-print">
-          Google will ask to let Reel Studio see and edit your Drive files and Sheets. It only works with what’s already
-          shared with you, and nothing leaves your browser except calls to Google.
+          Google will ask to let Reel Studio see and edit your Drive files and Sheets. It only works with the Reels folder
+          and Reel Tracker sheet shared with you.
         </p>
+        <LegalLinks />
       </div>
     </main>
+  );
+}
+
+export function LegalLinks() {
+  return (
+    <p className="legal-links">
+      <a href="./privacy.html">Privacy Policy</a>
+      <a href="./terms.html">Terms of Service</a>
+    </p>
   );
 }
 

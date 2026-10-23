@@ -21,7 +21,13 @@ re-run request, and edits them with Claude Code. Until the secrets below are add
 skips quietly.
 
 1. **Let the job's Google sign-in last.** In Google Cloud Console → Google Auth
-   Platform → Audience, click **Publish app** so the status is *In production*. In
+   Platform → Branding, fill in:
+   - App home page: https://afrozshaik-realtor.github.io/auto-video-edit/
+   - Privacy policy: https://afrozshaik-realtor.github.io/auto-video-edit/privacy.html
+   - Terms of service: https://afrozshaik-realtor.github.io/auto-video-edit/terms.html
+   - Authorized domain: `afrozshaik-realtor.github.io`
+
+   Then in Audience, click **Publish app** so the status is *In production*. In
    *Testing*, the job's sign-in expires every 7 days. You'll see an "unverified app"
    warning when signing in; that's expected for your own app.
 2. **Create a Desktop OAuth client.** Google Auth Platform → Clients → Create client →
