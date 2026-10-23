@@ -1,7 +1,8 @@
 name: AI edit
 
-# Checks the Reel Tracker for reels with a new raw clip (or a re-run request)
-# and edits them with Claude Code. Logs are public on this repo, so the job
+# Checks the Reel Tracker for reels with a new raw clip, a re-run request or a
+# thumbnail redo, edits them with Claude Code and draws thumbnails with OpenAI's
+# Image API. Logs are public on this repo, so the job
 # prints reel ids and statuses only, never titles, transcripts or file contents.
 
 on:
@@ -50,5 +51,7 @@ jobs:
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          OPENAI_IMAGE_MODEL: ${{ vars.OPENAI_IMAGE_MODEL }}
         run: npx tsx automation/run-ai-edit.ts

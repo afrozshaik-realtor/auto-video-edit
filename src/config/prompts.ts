@@ -157,6 +157,25 @@ Add sound design that follows the style rules: hit on the hook, taps on clicks, 
     text: `Save these to your outputs folder so I can download them: the final MP4 (1080x1920), a cover frame as a PNG, words.json, the matte, the B-roll shots you built, and any project files you'd need to re-render.`,
   },
   {
+    id: 'thumbnail',
+    label: 'Thumbnail brief',
+    kind: 'block',
+    draft: false,
+    text: `Plan this reel's cover thumbnail. An AI image model will make it from your prompt plus one photo of me.
+
+1. Reference photo: pick the clearest frame of me from the original footage. It must be sharp, with eyes open, looking at the camera, and an expression that matches the hook. Save it without captions or graphics, at full resolution.
+
+2. Image prompt: write a prompt for the image model. It must:
+- Say to keep the person from the reference photo exactly: same face, hair, skin tone, glasses and clothing. Don't beautify them or change their age.
+- Ask for a vertical 9:16 cover, photographic, bright and crisp, with one clear focal point.
+- Put one headline of 2–4 words on it, in quotes and spelled exactly, in a very large bold sans-serif with strong contrast. Make it the reel's main promise or hook. A shorter phrase than the title is fine if it hits harder.
+- Use this business's brand colours from the style rules for the headline or accents. If none are given, pick a bold palette that suits {{business_name}}.
+- Keep my face and the headline inside the centre 3:4 area (Instagram crops covers to 3:4 on the profile grid), and out of the bottom fifth (where Instagram's buttons sit).
+- Use a simple background that relates to the topic ({{reel_title}}; {{tags}}), softly blurred so I stand out.
+- Have no other text, logos, brand names, emoji, watermarks or extra people.
+Keep the prompt under 900 characters.`,
+  },
+  {
     id: 'caption',
     label: 'Caption and hashtags',
     kind: 'block',

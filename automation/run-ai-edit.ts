@@ -3,9 +3,10 @@
 //   npx tsx automation/run-ai-edit.ts --check   says whether any reel needs editing
 //   npx tsx automation/run-ai-edit.ts           edits reels until none are waiting
 //
-// It acts as the owner's Google account (a refresh token in GitHub secrets)
-// and runs Claude Code with the owner's Claude plan token. Nothing it prints
-// includes reel titles, transcripts or file contents: this repo's logs are public.
+// It acts as the owner's Google account (a refresh token in GitHub secrets),
+// runs Claude Code with the owner's Claude plan token, and draws thumbnails with
+// the owner's OpenAI API key. Nothing it prints includes reel titles,
+// transcripts or file contents: this repo's logs are public.
 
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, openAsBlob, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -15,9 +16,11 @@ import { AI_EDITOR_NAME } from '../src/config/workflow';
 import {
   AI_FILES,
   buildAiEditPrompt,
+  buildThumbnailRewritePrompt,
   cleanStatus,
   orderCandidates,
   runnableWithoutClipCheck,
+  thumbnailQueued,
   waitingForClip,
 } from '../src/data/aiEdit';
 import { runMigrations } from '../src/data/migrations';
@@ -26,6 +29,7 @@ import { SCHEMA_VERSION } from '../src/data/schema';
 import type { Reel } from '../src/data/types';
 import * as drive from '../src/services/google/drive';
 import { setTokenProvider } from '../src/services/google/http';
+import { cropToCover, DEFAULT_IMAGE_MODEL, generateImage, ImageApiError } from './thumbnail';
 
 const CLAUDE_TIMEOUT_MS = 3.75 * 60 * 60 * 1000;
 const JOB_BUDGET_MS = 4.5 * 60 * 60 * 1000;
@@ -83,18 +87,113 @@ async function rawClip(reel: Reel): Promise<drive.DriveFile | undefined> {
   return videos.sort((a, b) => (b.createdTime ?? '').localeCompare(a.createdTime ?? ''))[0];
 }
 
-async function nextReel(skip: Set<string> = new Set()): Promise<{ reel: Reel; clip: drive.DriveFile | undefined } | null> {
+type Work =
+  | { kind: 'edit'; reel: Reel; clip: drive.DriveFile | undefined }
+  | { kind: 'thumbnail'; reel: Reel };
+
+async function nextReel(skip: Set<string> = new Set()): Promise<Work | null> {
   const data = await repo.loadAll(ids());
   const now = new Date();
+  // Thumbnail redos take a minute, so they go first.
+  const thumb = data.reels.find((r) => !skip.has(r.id) && thumbnailQueued(r));
+  if (thumb) return { kind: 'thumbnail', reel: thumb };
   for (const reel of orderCandidates(data.reels)) {
     if (skip.has(reel.id)) continue;
-    if (runnableWithoutClipCheck(reel, now)) return { reel, clip: await rawClip(reel) };
+    if (runnableWithoutClipCheck(reel, now)) return { kind: 'edit', reel, clip: await rawClip(reel) };
     if (waitingForClip(reel)) {
       const clip = await rawClip(reel);
-      if (clip) return { reel, clip };
+      if (clip) return { kind: 'edit', reel, clip };
     }
   }
   return null;
+}
+
+// ---------- Thumbnail ----------
+
+/** The presenter photo from the newest project/edit-vN folder, downloaded to `dir`. */
+async function latestReferencePhoto(reel: Reel, dir: string): Promise<string | undefined> {
+  const project = await drive.findChildFolder(reel.driveFolderId, 'project');
+  if (!project) return undefined;
+  const runs = (await drive.listChildren(project.id))
+    .filter((f) => f.mimeType === drive.FOLDER_MIME && /^edit-v\d+$/.test(f.name))
+    .sort((a, b) => Number(b.name.slice(6)) - Number(a.name.slice(6)));
+  for (const run of runs) {
+    const face = (await drive.listChildren(run.id)).find((f) => f.name === AI_FILES.thumbFaceName);
+    if (face) return join(dir, await downloadTo(face, dir));
+  }
+  return undefined;
+}
+
+/** Draw the thumbnail with OpenAI, save it to final/, and record it. Never throws. */
+async function makeThumbnail(reel: Reel, prompt: string, referencePath: string | undefined, workdir: string) {
+  const apiKey = env('OPENAI_API_KEY', false);
+  if (!prompt.trim()) {
+    await setStatus(reel, { thumbStatus: 'failed', thumbDetail: 'Claude didn’t write a thumbnail prompt.' });
+    return;
+  }
+  if (!apiKey) {
+    await setStatus(reel, {
+      thumbStatus: 'failed',
+      thumbPrompt: prompt,
+      thumbDetail: 'No OpenAI API key yet. Add the OPENAI_API_KEY secret, then click “Make a new thumbnail”.',
+    });
+    return;
+  }
+  try {
+    await setStatus(reel, { thumbStatus: 'running', thumbDetail: 'Drawing the thumbnail', thumbPrompt: prompt });
+    const model = env('OPENAI_IMAGE_MODEL', false) || DEFAULT_IMAGE_MODEL;
+    const image = await generateImage({ apiKey, model, prompt, referencePath });
+    mkdirSync(workdir, { recursive: true });
+    const coverPath = join(workdir, 'thumbnail.png');
+    cropToCover(image, join(workdir, 'thumb-raw.png'), coverPath);
+
+    const finalFolder = (await drive.findChildFolder(reel.driveFolderId, 'final')) ?? (await drive.createFolder('final', reel.driveFolderId));
+    const existing = (await drive.listChildren(finalFolder.id)).filter((f) => /^thumbnail(-v\d+)?\.png$/.test(f.name)).length;
+    const name = existing ? `thumbnail-v${existing + 1}.png` : 'thumbnail.png';
+    const file = await drive.uploadFile(name, finalFolder.id, 'image/png', await openAsBlob(coverPath, { type: 'image/png' }));
+
+    const updated = await setStatus(reel, {
+      thumbStatus: 'done',
+      thumbDetail: `Made ${name}`,
+      thumbnailLink: drive.fileUrl(file.id),
+      thumbNotes: '',
+    });
+    await tick(updated, 'ai-thumbnail', true);
+    await repo.logActivity(ids(), AI_EDITOR_NAME, reel.id, 'Thumbnail made', name);
+    log(`reel ${reel.id}: thumbnail done`);
+  } catch (e) {
+    const message = e instanceof ImageApiError ? e.message : 'Making the thumbnail failed.';
+    await setStatus(reel, { thumbStatus: 'failed', thumbDetail: message }).catch(() => {});
+    log(`reel ${reel.id}: thumbnail failed`);
+  }
+}
+
+/** Redo just the thumbnail, rewriting Claude's prompt with the team's notes first. */
+async function redoThumbnail(reel: Reel) {
+  log(`reel ${reel.id}: new thumbnail`);
+  await setStatus(reel, { thumbStatus: 'running', thumbDetail: 'Writing the thumbnail prompt' });
+  await tick(reel, 'ai-thumbnail', false);
+  const workdir = join(process.env.RUNNER_TEMP ?? '/tmp', `thumb-${reel.id}`);
+  const data = await repo.loadAll(ids());
+  const business = data.businesses.find((b) => b.id === reel.business);
+
+  let prompt = reel.thumbPrompt;
+  if (reel.thumbNotes.trim() || !prompt.trim()) {
+    prompt = askClaude(
+      buildThumbnailRewritePrompt({
+        businessName: business?.name ?? reel.business,
+        styleRules: business?.styleRulesMd ?? '',
+        reelTitle: reel.title,
+        tags: reel.tags,
+        caption: reel.caption,
+        previousPrompt: prompt || '(none yet: write the first prompt from the brief)',
+        notes: reel.thumbNotes || '(no notes: write a fresh take on the brief)',
+      }),
+      workdir,
+    );
+  }
+  const reference = await latestReferencePhoto(reel, workdir);
+  await makeThumbnail(reel, prompt, reference, workdir);
 }
 
 // ---------- One edit ----------
@@ -127,28 +226,49 @@ const MIME: Record<string, string> = {
 };
 const mimeOf = (path: string) => MIME[path.split('.').pop()?.toLowerCase() ?? ''] ?? 'application/octet-stream';
 
+/** Claude gets only what it needs: never the Google or OpenAI secrets. */
+function claudeEnv(): NodeJS.ProcessEnv {
+  const childEnv: NodeJS.ProcessEnv = {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME,
+    LANG: 'C.UTF-8',
+    TMPDIR: process.env.RUNNER_TEMP ?? process.env.TMPDIR,
+    CLAUDE_CODE_OAUTH_TOKEN: env('CLAUDE_CODE_OAUTH_TOKEN'),
+  };
+  const pexels = env('PEXELS_API_KEY', false);
+  if (pexels) childEnv.PEXELS_API_KEY = pexels;
+  return childEnv;
+}
+
+/** The headless Claude Code command. CLAUDE_BIN lets a dry run swap in a stand-in. */
+function claudeCommand(maxTurns: number): [string, string[]] {
+  const model = env('CLAUDE_MODEL', false) || 'opus';
+  const [bin, ...binArgs] = (env('CLAUDE_BIN', false) || 'claude').split(/\s+/);
+  return [
+    bin,
+    [...binArgs, '-p', '--model', model, '--dangerously-skip-permissions', '--max-turns', String(maxTurns), '--output-format', 'json'],
+  ];
+}
+
+/** A short Claude call that answers with text (for rewriting the thumbnail prompt). */
+function askClaude(prompt: string, workdir: string): string {
+  mkdirSync(workdir, { recursive: true });
+  const [bin, args] = claudeCommand(3);
+  const r = spawnSync(bin, args, { cwd: workdir, env: claudeEnv(), input: prompt, encoding: 'utf8', timeout: 10 * 60 * 1000 });
+  try {
+    const parsed = JSON.parse(r.stdout) as { result?: string; is_error?: boolean };
+    if (!parsed.is_error && parsed.result?.trim()) return parsed.result.trim();
+  } catch {
+    // fall through
+  }
+  throw new Error('Claude couldn’t rewrite the thumbnail prompt.');
+}
+
 /** Run Claude Code headless. Resolves with its exit code; status.txt updates go to the Sheet. */
 function runClaude(workdir: string, prompt: string, reel: Reel, logFile: string): Promise<{ code: number; result: string }> {
   return new Promise((resolve) => {
-    // Claude gets only what it needs: never the Google secrets.
-    const childEnv: NodeJS.ProcessEnv = {
-      PATH: process.env.PATH,
-      HOME: process.env.HOME,
-      LANG: 'C.UTF-8',
-      TMPDIR: process.env.RUNNER_TEMP ?? process.env.TMPDIR,
-      CLAUDE_CODE_OAUTH_TOKEN: env('CLAUDE_CODE_OAUTH_TOKEN'),
-    };
-    const pexels = env('PEXELS_API_KEY', false);
-    if (pexels) childEnv.PEXELS_API_KEY = pexels;
-
-    const model = env('CLAUDE_MODEL', false) || 'opus';
-    // CLAUDE_BIN lets a dry run swap in a stand-in command.
-    const [bin, ...binArgs] = (env('CLAUDE_BIN', false) || 'claude').split(/\s+/);
-    const child = spawn(
-      bin,
-      [...binArgs, '-p', '--model', model, '--dangerously-skip-permissions', '--max-turns', '600', '--output-format', 'json'],
-      { cwd: workdir, env: childEnv, stdio: ['pipe', 'pipe', 'pipe'] },
-    );
+    const [bin, args] = claudeCommand(600);
+    const child = spawn(bin, args, { cwd: workdir, env: claudeEnv(), stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = '';
     child.stdout.on('data', (d: Buffer) => (stdout += d.toString()));
     child.stderr.on('data', (d: Buffer) => appendFileSync(logFile, d));
@@ -247,7 +367,8 @@ async function editReel(reel: Reel, clip: drive.DriveFile | undefined) {
   if (current.stage === 'raw') current = await repo.moveReel(ids(), AI_EDITOR_NAME, current, 'working');
   const checklist = data.checklists.get(reel.id);
   if (!checklist?.get('upload')?.done) await tick(current, 'upload', true);
-  for (const step of ['ai-edit', 'ai-caption', 'phone-check']) if (checklist?.get(step)?.done) await tick(current, step, false);
+  for (const step of ['ai-edit', 'ai-caption', 'ai-thumbnail', 'phone-check']) if (checklist?.get(step)?.done) await tick(current, step, false);
+  current = await setStatus(current, { thumbStatus: '', thumbDetail: 'Made after the AI edit' });
   await repo.logActivity(ids(), AI_EDITOR_NAME, reel.id, 'AI edit started', `edit ${runNumber}`);
 
   const workdir = join(process.env.RUNNER_TEMP ?? '/tmp', `reel-${reel.id}`);
@@ -309,6 +430,16 @@ async function editReel(reel: Reel, clip: drive.DriveFile | undefined) {
   if (caption) await tick(current, 'ai-caption', true);
   await repo.logActivity(ids(), AI_EDITOR_NAME, reel.id, 'AI edit finished', `edit ${runNumber}`);
   log(`reel ${reel.id}: done`);
+
+  // The thumbnail uses Claude's prompt and reference photo from this edit.
+  const thumbPromptPath = join(workdir, AI_FILES.thumbPrompt);
+  const facePath = join(workdir, AI_FILES.thumbFace);
+  await makeThumbnail(
+    current,
+    existsSync(thumbPromptPath) ? readFileSync(thumbPromptPath, 'utf8').trim() : '',
+    existsSync(facePath) ? facePath : undefined,
+    workdir,
+  );
 }
 
 // ---------- Main ----------
@@ -333,7 +464,7 @@ async function main() {
 
   if (check) {
     const work = await nextReel();
-    log(work ? `work found: reel ${work.reel.id}` : 'nothing to edit');
+    log(work ? `work found: ${work.kind} for reel ${work.reel.id}` : 'nothing to edit');
     if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `has_work=${work ? 'true' : 'false'}\n`);
     return;
   }
@@ -345,11 +476,14 @@ async function main() {
     if (!work) break;
     tried.add(work.reel.id);
     try {
-      await editReel(work.reel, work.clip);
+      if (work.kind === 'thumbnail') await redoThumbnail(work.reel);
+      else await editReel(work.reel, work.clip);
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
+      const message = (e instanceof Error ? e.message : String(e)).slice(0, 200);
       log(`reel ${work.reel.id}: error`);
-      await setStatus(work.reel, { aiStatus: 'failed', aiDetail: message.slice(0, 200) }).catch(() => {});
+      const patch: repo.ReelPatch =
+        work.kind === 'thumbnail' ? { thumbStatus: 'failed', thumbDetail: message } : { aiStatus: 'failed', aiDetail: message };
+      await setStatus(work.reel, patch).catch(() => {});
     }
   }
 }

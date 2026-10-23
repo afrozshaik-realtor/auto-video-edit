@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { AI_FILES, AI_STALE_MS, buildAiEditPrompt, cleanStatus, orderCandidates, runnableWithoutClipCheck, waitingForClip } from './aiEdit';
+import { driveFileId } from '../components/AiPanels';
+import {
+  AI_FILES,
+  AI_STALE_MS,
+  THUMB_REQUEST_SIZE,
+  buildAiEditPrompt,
+  buildThumbnailRewritePrompt,
+  cleanStatus,
+  orderCandidates,
+  runnableWithoutClipCheck,
+  thumbnailQueued,
+  waitingForClip,
+} from './aiEdit';
 import { makeReel } from './fixtures';
 import { missingHeaders } from './migrations';
 import { TABS, reelFromRecord, reelToRecord } from './schema';
@@ -54,7 +66,7 @@ describe('the AI edit prompt', () => {
 
   it('runs every pass in order with no human in the loop', () => {
     const p = buildAiEditPrompt(base);
-    const order = ['Trim', 'Pass 01', 'Tighten the cut', 'Pass 02', 'B-roll: shot list', 'B-roll: build and mix', 'Pass 03', 'Pass 04', 'Pass 05', 'Director review', 'Caption and hashtags', 'Save'].map((h) => `\n### ${h}`);
+    const order = ['Trim', 'Pass 01', 'Tighten the cut', 'Pass 02', 'B-roll: shot list', 'B-roll: build and mix', 'Pass 03', 'Pass 04', 'Pass 05', 'Director review', 'Caption and hashtags', 'Thumbnail', 'Save'].map((h) => `\n### ${h}`);
     const positions = order.map((h) => p.indexOf(h));
     expect(positions.every((x) => x >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
@@ -89,16 +101,86 @@ describe('the AI edit prompt', () => {
   });
 });
 
-describe('schema v2', () => {
-  it('round-trips the AI fields', () => {
-    const r = makeReel({ aiStatus: 'running', aiDetail: 'Pass 03', aiRuns: 2, aiNotes: 'n', caption: 'c' });
-    expect(reelFromRecord(reelToRecord(r))).toEqual(r);
-    expect(reelFromRecord({ ai_status: 'nonsense', ai_runs: 'x' })).toMatchObject({ aiStatus: '', aiRuns: 0 });
+describe('thumbnails', () => {
+  const base = {
+    businessName: 'TCE (Real Estate)',
+    styleRules: '- Brand colors: #2F5FD0',
+    reelTitle: 'First-time buyer mistakes',
+    tags: ['buyers'],
+    rawFileName: 'take1.mp4',
+    ownBrollFiles: [],
+    notes: '',
+    runNumber: 1,
+    hasStockApi: false,
+  };
+
+  it('has Claude write the image prompt and pick the reference photo during the edit', () => {
+    const p = buildAiEditPrompt(base);
+    expect(p).toContain('\n### Thumbnail');
+    expect(p).toContain(AI_FILES.thumbPrompt);
+    expect(p).toContain(AI_FILES.thumbFace);
+    expect(p.indexOf('\n### Thumbnail')).toBeLessThan(p.indexOf('\n### Save'));
+    expect(p).toMatch(/keep the person from the reference photo exactly/i);
+    expect(AI_FILES.thumbFace.endsWith(AI_FILES.thumbFaceName)).toBe(true);
+    expect(AI_FILES.thumbFace.startsWith(AI_FILES.projectDir)).toBe(true);
   });
 
-  it('finds the columns a v1 sheet is missing, in order', () => {
+  it('asks for a model-friendly size that crops to 1080x1920', () => {
+    const [w, h] = THUMB_REQUEST_SIZE.split('x').map(Number);
+    expect(w % 16).toBe(0);
+    expect(h % 16).toBe(0);
+    expect(w).toBeGreaterThanOrEqual(1080);
+    expect(h).toBeGreaterThanOrEqual(1920);
+  });
+
+  it('only redoes a queued thumbnail when no full edit is pending', () => {
+    expect(thumbnailQueued(makeReel({ thumbStatus: 'queued', aiStatus: 'done' }))).toBe(true);
+    expect(thumbnailQueued(makeReel({ thumbStatus: 'queued', aiStatus: 'running' }))).toBe(false);
+    expect(thumbnailQueued(makeReel({ thumbStatus: 'queued', aiStatus: 'queued' }))).toBe(false);
+    expect(thumbnailQueued(makeReel({ thumbStatus: 'done', aiStatus: 'done' }))).toBe(false);
+  });
+
+  it('rewrites the prompt from the team’s notes', () => {
+    const p = buildThumbnailRewritePrompt({
+      ...base,
+      caption: 'Three mistakes to avoid.\n\n#realestate',
+      previousPrompt: 'OLD PROMPT',
+      notes: 'Headline “Don’t overpay”',
+    });
+    expect(p).toContain('OLD PROMPT');
+    expect(p).toContain('Headline “Don’t overpay”');
+    expect(p).toContain('Three mistakes to avoid.');
+    expect(p).not.toContain('#realestate');
+    expect(p).toMatch(/Reply with the new prompt only/);
+    expect(p).not.toContain('{{');
+  });
+
+  it('reads the Drive file id from a link', () => {
+    expect(driveFileId('https://drive.google.com/file/d/abc_123-X/view')).toBe('abc_123-X');
+    expect(driveFileId('')).toBeNull();
+  });
+});
+
+describe('schema v3', () => {
+  it('round-trips the AI and thumbnail fields', () => {
+    const r = makeReel({
+      aiStatus: 'running', aiDetail: 'Pass 03', aiRuns: 2, aiNotes: 'n', caption: 'c',
+      thumbnailLink: 'l', thumbStatus: 'failed', thumbDetail: 'd', thumbPrompt: 'p', thumbNotes: 'tn',
+    });
+    expect(reelFromRecord(reelToRecord(r))).toEqual(r);
+    expect(reelFromRecord({ ai_status: 'nonsense', ai_runs: 'x', thumb_status: '??' })).toMatchObject({
+      aiStatus: '', aiRuns: 0, thumbStatus: '',
+    });
+  });
+
+  it('finds the columns an older sheet is missing, in order', () => {
     const v1 = TABS.Reels.slice(0, 14);
-    expect(missingHeaders([...v1], TABS.Reels)).toEqual(['ai_status', 'ai_detail', 'ai_updated_at', 'ai_runs', 'ai_notes', 'caption']);
+    const v2 = TABS.Reels.slice(0, 20);
+    expect(missingHeaders([...v1], TABS.Reels)).toEqual([
+      'ai_status', 'ai_detail', 'ai_updated_at', 'ai_runs', 'ai_notes', 'caption',
+      'thumbnail_link', 'thumb_status', 'thumb_detail', 'thumb_prompt', 'thumb_notes',
+    ]);
+    expect(missingHeaders([...v2], TABS.Reels)).toEqual(['thumbnail_link', 'thumb_status', 'thumb_detail', 'thumb_prompt', 'thumb_notes']);
     expect(missingHeaders([...TABS.Reels], TABS.Reels)).toEqual([]);
     expect(missingHeaders([...v1, 'my_extra', 'caption'], TABS.Reels)).not.toContain('caption');
   });
