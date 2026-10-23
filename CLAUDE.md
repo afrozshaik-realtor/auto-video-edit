@@ -21,16 +21,25 @@ Businesses must be data, not hard-coded, so more can be added later.
 
 ## Non-negotiable constraints
 
-1. Hosting: static site on GitHub Pages. No server, no paid services.
+1. Hosting: static site on GitHub Pages, with no server of our own. The AI edit runs as
+   a scheduled GitHub Actions job (free on this public repo) using the owner's existing
+   Claude plan. No other paid services. (Changed with Afroz's approval, 2026-10-23.)
 2. Video files never go in this repo. They live in Google Drive.
 3. Shared data lives in a Google Sheet ("Reel Tracker") read/written via the Sheets API.
 4. Auth: Google Identity Services (OAuth token model in the browser). Each user acts
    with their own Google permissions. Access is controlled by sharing the Drive folder
-   and the Sheet with team members.
+   and the Sheet with team members. Exception: the AI edit job acts as the owner's
+   Google account via a refresh token (a service account can't upload files to a
+   personal Drive).
 5. No secrets in the repo. The OAuth Client ID, Sheet ID and folder IDs are not secret
-   and go in `src/config/app.config.ts`. Never add API keys or client secrets.
+   and go in `src/config/app.config.ts`. Never add API keys or client secrets. The AI
+   edit job's credentials live only in GitHub Actions secrets.
 6. Must work well on a phone (team will check and tick steps on mobile).
 7. Light and dark mode.
+8. GitHub Actions logs are public on this repo: the AI edit job prints reel ids and
+   statuses only, never titles, transcripts, captions or file contents, and uploads no
+   artifacts. Claude runs with only its own token and the stock API key in its
+   environment, never the Google secrets.
 
 ## Tech stack
 
@@ -60,7 +69,7 @@ Reels/
 
 ### Stage rules
 - **Raw**: reel created, raw clip uploaded.
-- **Working**: moves automatically when the Setup step is ticked (editing started).
+- **Working**: moves automatically when the AI edit job starts on the reel.
 - **Completed**: moves when every required step is ticked and the user clicks
   "Mark reel complete" (show a confirmation). The posted URL is required.
 - A reel can be moved back a stage with a confirmation (e.g. re-edit needed).
@@ -69,7 +78,9 @@ Reels/
 
 - `Reels`: id, title, business, tags (comma-separated), stage, assignee, created_by,
   created_at, updated_at, drive_folder_id, final_video_link, posted_url, post_date,
-  notes
+  notes, ai_status (blank / queued / running / done / failed), ai_detail, ai_updated_at,
+  ai_runs, ai_notes (notes for a re-run), caption (written by the AI edit).
+  Schema version 2 added the ai_* and caption columns.
 - `Checklist`: reel_id, step_id, done (TRUE/FALSE), done_by, done_at, note
 - `Businesses`: id, name, short_code, accent_color, style_rules_md, active
 - `Tags`: tag, color (optional)
@@ -93,40 +104,55 @@ If config IDs are empty, show a setup screen that, after Google sign-in:
 Define steps in `src/config/workflow.ts` as versioned data so steps can be added,
 reordered or edited without touching UI code. Each step has: id, title, who
 (Claude / You / Both), required (bool), instructions (short, plain language),
-optional prompt text (with a Copy button), tool buttons, and a "done when" line.
+tool buttons, a "done when" line, and optionally `auto` (ticked by the AI edit job,
+not people) and a `panel` (AI status, caption, or review). Workflow version 3: nobody
+copies or pastes prompts.
 
-| # | Step | Who | Tool buttons | Prompt to copy |
+| # | Step | Who | Done by | Tool buttons |
 |---|---|---|---|---|
-| 1 | Shoot: headroom above head, clean background, clear audio | You | — | — |
-| 2 | Trim dead air, export 1080p, under 30 MB | You | CapCut | — |
-| 3 | Upload raw clip to the reel's `raw/` folder | You | Open reel folder (Drive) | — |
-| 4 | Setup: new Claude chat (Opus 5.5, code execution on), upload clip, paste setup prompt + this business's style rules | Both | Claude | Setup prompt merged with the business's style rules |
-| 5 | Pass 01 Transcribe; fix misheard words in the table; tighten the cut | Both | Claude | Pass 01 + "Tighten the cut" |
-| 6 | Pass 02 Cut-out; check hair edges, no outline, no holes | Both | Claude | Pass 02 |
-| 7 | B-roll plan: Claude writes a shot list matched to words.json (trigger word, timecode, layout, source: BUILD / STOCK / OWN); approve it, gather stock and own clips into `broll/`, upload to the chat | Both | Claude, Pexels, Pixabay, Canva, Open reel folder (Drive) | B-roll shot list |
-| 8 | B-roll mix: Claude builds the BUILD shots in code and cuts all B-roll in on its trigger words | Both | Claude | B-roll build and mix |
-| 9 | Pass 03 Captions; approve key words | Both | Claude | Pass 03 |
-| 10 | Pass 04 Motion; approve the scene plan before build | Both | Claude | Pass 04 |
-| 11 | Pass 05 Sound; listen on a phone | Both | Claude | Pass 05 |
-| 12 | Direct: send notes until it's right | Both | Claude | Director note chips (one copy button each) |
-| 13 | Save final MP4, cover frame and project files to the reel folder | You | Open reel folder (Drive) | Ask Claude to save to outputs |
-| 14 | Optional polish (manual fixes, brand assets) | You | CapCut, Canva | — |
-| 15 | Phone check: sound on and off, nothing under Instagram buttons, loudness OK | You | — | — |
-| 16 | Write caption and hashtags | Both | ChatGPT, Claude | Caption prompt using business + reel title + tags |
-| 17 | Post and paste the posted URL | You | Instagram | — |
+| 1 | Shoot: headroom above head, clean background, clear audio (no trimming needed) | You | Person | — |
+| 2 | Upload the raw clip to the reel's `raw/` folder (own B-roll footage to `broll/`) | You | Person (or the job, when it finds the clip) | Open reel folder (Drive) |
+| 3 | AI edit: trim, Pass 01–02, B-roll plan and mix, Pass 03–05, director self-review, save | Claude | AI edit job | Open reel folder (Drive) |
+| 4 | AI caption and hashtags (shown with a Copy caption button) | Claude | AI edit job | — |
+| 5 | Optional polish (manual fixes, brand assets) | You | Person | CapCut, Canva |
+| 6 | Phone check: sound on and off, nothing under Instagram buttons, loudness OK. Director note chips add notes; "Re-run AI edit with these notes" queues a new version | You | Person | — |
+| 7 | Post and paste the posted URL | You | Person | Instagram |
 
-Required steps: all except 14 (16 required). Store the exact prompts from the kit in
-`src/config/prompts.ts` (setup, five passes, tighten-the-cut, director notes).
-The B-roll prompts are not from the kit; the setup prompt must mention the B-roll pass.
-Director note chips: outline looks fake; graphic covers face; too much on screen;
+Required steps: all except 5 (6 required).
+
+### AI edit job
+- `.github/workflows/ai-edit.yml` runs every 10 minutes (and on demand). A quick check
+  step looks for work; video tools and Claude Code are only installed when there is some.
+- `automation/run-ai-edit.ts` picks the next reel: queued reels first (a re-run or "start
+  now"), then reels that have never been edited and have a video in `raw/`, then
+  "running" reels with no update for 5 hours (crashed). Failed reels wait for a person
+  to click "Try the AI edit again".
+- For each reel it sets ai_status=running, moves the folder to Working, ticks Upload,
+  unticks the AI steps and the phone check, downloads the clip and `broll/` files, and
+  runs Claude Code headless with the single prompt from `src/data/aiEdit.ts`
+  (`buildAiEditPrompt`). Claude writes its current step to `status.txt`, which the job
+  copies to ai_detail.
+- Outputs (the contract in `AI_FILES`): `out/final.mp4` (1080x1920, checked with
+  ffprobe), `out/cover.png`, `out/caption.txt`, `out/project/`. The job uploads them to
+  `final/final.mp4` (re-runs: `final-v2.mp4`, …; nothing is overwritten or deleted),
+  `final/cover.png` and `project/edit-vN/`, then sets ai_status=done, the caption, the
+  final video link, and ticks the AI steps. One retry, then ai_status=failed with a
+  short reason.
+- Store the exact prompts from the kit in `src/config/prompts.ts` (setup, five passes,
+  tighten-the-cut, director notes). The AI edit prompt embeds the pass, tighten,
+  B-roll, caption and director-note prompts, and tells Claude to make every approval
+  decision itself. The B-roll prompts are not from the kit.
+
+Director note chips (on the phone check, as re-run notes): outline looks fake; graphic covers face; too much on screen;
 graphic lands late (with [word] placeholder); captions too fast; hook harder;
 use brand colors [hex]; only re-render a time range; B-roll doesn't match at [word];
 too much B-roll; keep B-roll off the hook; swap the B-roll shot at [time].
 
 B-roll rules (in the B-roll prompts):
 - Sources are free only: BUILD (Claude makes it in code: animated stats, charts, text
-  cards, simple illustrations, mock screens), STOCK (Pexels / Pixabay, portrait), OWN
-  (the team's footage). No paid AI video generators.
+  cards, simple illustrations, mock screens), STOCK (the job fetches it from the free
+  Pexels API when the PEXELS_API_KEY secret is set; otherwise BUILD and OWN only), OWN
+  (the team's footage from the reel's `broll/` folder). No paid AI video generators.
 - Nothing in the first 1.5 s (the hook stays on the face). B-roll at most 40% of the
   reel, 2–4 s per shot, at least 1.5 s of face between shots. Each shot starts on its
   trigger word.
@@ -135,13 +161,11 @@ B-roll rules (in the B-roll prompts):
 - The B-roll pass runs after Pass 02 (needs the matte) and before Pass 03 (captions
   are placed on the final cut).
 
-Step troubleshooting tips (show under a "Stuck?" disclosure):
-- Pass 01: if a speech model won't download, ask Claude to use a Whisper or Parakeet
-  model from the sherpa-onnx GitHub releases.
-- Pass 02: rough edges → RobustVideoMatting (ONNX) from GitHub releases; the sandbox
-  is CPU-only, so ask Claude to process frames in chunks and keep clips under ~30 s.
-- Any pass: ask Claude to save key files to its outputs folder after each pass, since
-  the sandbox can reset during long gaps. Download and add them to `project/`.
+Kit troubleshooting tips (the runner has internet, so the AI edit can follow them):
+- Pass 01: if a speech model won't download, use a Whisper or Parakeet model from the
+  sherpa-onnx GitHub releases.
+- Pass 02: rough edges → RobustVideoMatting (ONNX) from GitHub releases; the runner is
+  CPU-only, so process frames in chunks.
 
 ## Tools (configurable)
 
@@ -156,16 +180,19 @@ All open in a new tab.
 
 1. **Board** (home): three lanes — Raw, Working, Completed — styled like tracks on an
    editing timeline, with each reel as a clip on its track. Clip shows title,
-   business color, tags, assignee, progress (x/16 required steps). Completed lane
-   collapsed by default, showing the 10 most recent.
+   business color, tags, assignee, progress (x/6 required steps), and the AI edit
+   status when queued, running or failed. Completed lane collapsed by default, showing
+   the 10 most recent.
 2. **Filters** (on Board): business, tags (multi-select, match any/all), stage,
    assignee, text search. Filters reflected in the URL so a filtered view can be
    bookmarked or shared.
 3. **New reel**: title, business, tags (type-ahead from existing tags, create new),
    assignee. Creates Drive folder in Raw + Sheet row.
 4. **Reel detail**: guided stepper (one step expanded at a time, "Next step" button),
-   prompts with copy buttons, tool buttons, per-step notes, Drive folder link, final
-   video link, posted URL, activity history.
+   tool buttons, per-step notes, Drive folder link, final video link, posted URL,
+   activity history. The AI edit step shows live status (refreshed every minute while
+   queued or running), "start now" and "try again" buttons; the caption step shows the
+   caption with a Copy caption button; the phone check offers re-run with notes.
 5. **Library**: all prompts and director notes for quick copying outside a reel.
 6. **Settings**: businesses (name, color, style rules editor), tags (rename/merge/
    color), tools list, team members list (for assignee picker), app version +
@@ -232,8 +259,11 @@ business/tag/stage, GitHub Pages deploy.
 Done when: a reel can go from New → Raw → Working → Completed with its Drive folder
 moving correctly, on desktop and phone, by two different signed-in team members.
 
+**AI edit (0.3.0)**: the automated AI edit job, workflow v3, schema v2 with the
+migrations framework (`src/data/migrations.ts`).
+
 **Phase 2**: Settings (businesses, tags, tools, team), Library, activity history,
-URL-synced filters, dark mode polish, migrations framework, tests for workflow logic.
+URL-synced filters, dark mode polish, more tests for workflow logic.
 
 ## Working agreement for Claude Code
 
@@ -245,11 +275,19 @@ URL-synced filters, dark mode polish, migrations framework, tests for workflow l
 ## Manual steps Afroz must do (Claude Code cannot do these)
 
 1. Google Cloud Console: create a project, enable Google Drive API and Google Sheets API.
-2. OAuth consent screen: user type External (or Internal if using Google Workspace),
-   publishing status Testing, add every team member's Google email as a test user.
+2. OAuth consent screen: user type External (or Internal if using Google Workspace).
+   Publishing status must be **In production** for the AI edit job: in Testing, its
+   refresh token expires after 7 days. Unverified is fine for a small team (people see
+   an "unverified app" warning once).
 3. Create an OAuth Client ID (Web application). Authorized JavaScript origins:
    `https://afrozshaik-realtor.github.io` and `http://localhost:5173`.
    Give the Client ID to Claude Code for `app.config.ts`.
 4. GitHub repo → Settings → Pages → Source: GitHub Actions.
 5. After first-run setup, share the `Reels` folder and "Reel Tracker" Sheet with the
    team (Editor access).
+6. AI edit job (see README "Set up the AI editor"): create a **Desktop app** OAuth
+   client; run `npm run ai:google-token` and sign in as the Reels owner; run
+   `claude setup-token`; optionally get a free Pexels API key. Add the GitHub Actions
+   secrets GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN,
+   CLAUDE_CODE_OAUTH_TOKEN and (optional) PEXELS_API_KEY. Optional repository
+   variable CLAUDE_MODEL (default `opus`).

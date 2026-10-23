@@ -3,6 +3,42 @@
 All notable changes to Reel Studio. The version shown in the app comes from
 `APP_VERSION` in `src/config/app.config.ts`.
 
+## 0.3.0 — 2026-10-23
+
+### Added
+- **AI editor.** A GitHub Actions job runs Claude Code with your Claude plan. It starts
+  by itself when a clip lands in a reel's `raw/` folder, usually within 10 minutes.
+  - It runs every pass in order: trim, transcribe, cut-out, B-roll, captions, motion,
+    sound and a director self-review.
+  - It saves `final.mp4`, `cover.png` and the project files to Drive, and writes the
+    caption and hashtags.
+  - Nobody copies or pastes prompts.
+- The AI edit step shows live progress, refreshed every minute. It has buttons to
+  start an edit now or try again after a failure.
+- The caption step shows the AI's caption with a **Copy caption** button.
+- The phone check has director-note chips and a **Re-run AI edit with these notes**
+  button. Each re-run saves a new `final-vN.mp4`, and earlier versions are kept.
+- The board shows each reel's AI status: queued, editing, or failed.
+- Sheet schema version 2 adds six columns to Reels: `ai_status`, `ai_detail`,
+  `ai_updated_at`, `ai_runs`, `ai_notes` and `caption`. The migration in
+  `src/data/migrations.ts` adds them automatically on first load.
+- `npm run ai:google-token`, a one-time helper for the job's Google sign-in.
+
+### Changed
+- The workflow is now version 3 and has 7 steps:
+  1. Shoot
+  2. Upload
+  3. AI edit (automatic)
+  4. AI caption (automatic)
+  5. Polish (optional)
+  6. Phone check
+  7. Post
+
+  Trimming, setup, every pass, B-roll, directing and saving are now inside the AI edit.
+  The caption step moved before polish and is automatic. Steps 3 and 4 can't be ticked
+  by hand.
+- A reel now moves to Working when the AI edit starts.
+
 ## 0.2.0 — 2026-10-21
 
 ### Added
