@@ -4,9 +4,10 @@
 //   npm run ai:google-token
 //
 // It needs a "Desktop app" OAuth client (Google Cloud → APIs & Services →
-// Credentials). Nothing is saved to disk; copy the printed token straight
-// into the GOOGLE_REFRESH_TOKEN GitHub secret.
+// Credentials). Nothing is saved to disk. At the end it offers to save the
+// client ID, client secret and refresh token to GitHub secrets with `gh`.
 
+import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { createInterface } from 'node:readline/promises';
 import { appConfig } from '../src/config/app.config';
@@ -72,8 +73,29 @@ async function main() {
   });
   const data = (await res.json()) as { refresh_token?: string; error_description?: string };
   if (!data.refresh_token) throw new Error(data.error_description ?? 'Google didn’t return a refresh token.');
-  console.log('Refresh token (save it as the GOOGLE_REFRESH_TOKEN secret, then clear your terminal):\n');
-  console.log(data.refresh_token);
+
+  // Save all three secrets from this one run, so the token always matches its client.
+  const save = (await ask('\nSave the client ID, client secret and refresh token to this repo’s GitHub secrets now? (y/n) '))
+    .toLowerCase()
+    .startsWith('y');
+  if (save) {
+    const secrets: [string, string][] = [
+      ['GOOGLE_OAUTH_CLIENT_ID', clientId],
+      ['GOOGLE_OAUTH_CLIENT_SECRET', clientSecret],
+      ['GOOGLE_REFRESH_TOKEN', data.refresh_token],
+    ];
+    for (const [name, value] of secrets) {
+      const r = spawnSync('gh', ['secret', 'set', name], { input: value, encoding: 'utf8', shell: process.platform === 'win32' });
+      if (r.status !== 0) throw new Error(`Couldn’t save ${name} with the GitHub CLI. Is "gh" installed and signed in?`);
+      console.log(`Saved ${name}.`);
+    }
+    console.log('\nDone. Start the AI editor with: gh workflow run ai-edit.yml');
+    return;
+  }
+  console.log('\nSave these three as GitHub secrets, all from this run, then clear your terminal:\n');
+  console.log(`GOOGLE_OAUTH_CLIENT_ID      ${clientId}`);
+  console.log('GOOGLE_OAUTH_CLIENT_SECRET  (the secret you entered above)');
+  console.log(`GOOGLE_REFRESH_TOKEN        ${data.refresh_token}`);
 }
 
 main().catch((e) => {
