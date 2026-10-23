@@ -3,6 +3,33 @@
 All notable changes to Reel Studio. The version shown in the app comes from
 `APP_VERSION` in `src/config/app.config.ts`.
 
+## 0.4.0 — 2026-10-23
+
+### Added
+- **AI thumbnail step**, after the caption and done automatically. It works in two
+  parts:
+  - During the edit, Claude picks a sharp frame of you and writes the image prompt.
+    The prompt keeps your face as it is and adds a 2–4 word headline in the brand
+    colours. It keeps your face and the headline inside Instagram's 3:4 grid crop and
+    away from the buttons, with a blurred background that fits the topic.
+  - The AI editor then sends the prompt and that frame to OpenAI's image model
+    (`gpt-image-2.5-sunburst`), crops the result to 1080x1920, and saves it to the
+    reel's `final/` folder.
+- The thumbnail step shows a preview of the image.
+- **Make a new thumbnail** redoes only the thumbnail, with optional notes. Claude
+  rewrites the prompt using your notes, and the redo takes about a minute. Every
+  version is kept: `thumbnail-v2.png` and so on.
+- The image prompt Claude wrote is shown with a copy button, so you can make a
+  thumbnail by hand in ChatGPT if needed.
+- New secret `OPENAI_API_KEY` and optional variable `OPENAI_IMAGE_MODEL`.
+- Sheet schema version 3 adds five thumbnail columns to Reels: `thumbnail_link`,
+  `thumb_status`, `thumb_detail`, `thumb_prompt` and `thumb_notes`. They're added
+  automatically on first load.
+
+### Changed
+- The workflow is now version 4 and has 8 steps. AI thumbnail is step 5, and 7 steps
+  are required.
+
 ## 0.3.0 — 2026-10-23
 
 ### Added

@@ -36,10 +36,13 @@ skips quietly.
    ```bash
    claude setup-token
    ```
-5. **Optional: free stock footage.** Get a free API key at
+5. **OpenAI key for thumbnails.** Create an API key at
+   https://platform.openai.com/api-keys (it's billed per image, separately from a
+   ChatGPT subscription). A good idea: set a monthly spending limit there.
+6. **Optional: free stock footage.** Get a free API key at
    https://www.pexels.com/api/. Without it, B-roll is built by Claude or taken from the
    reel's `broll/` folder.
-6. **Add the secrets.** Run each of these and paste the value when asked. They're
+7. **Add the secrets.** Run each of these and paste the value when asked. They're
    stored encrypted in GitHub, never in the repo:
    ```bash
    gh secret set GOOGLE_OAUTH_CLIENT_ID
@@ -54,9 +57,12 @@ skips quietly.
    gh secret set CLAUDE_CODE_OAUTH_TOKEN
    ```
    ```bash
+   gh secret set OPENAI_API_KEY
+   ```
+   ```bash
    gh secret set PEXELS_API_KEY
    ```
-7. **Try it.** Upload a clip to a reel's `raw/` folder. Within about 10 minutes the AI
+8. **Try it.** Upload a clip to a reel's `raw/` folder. Within about 10 minutes the AI
    edit step shows "Downloading the clip", then each pass. To start a check straight
    away, run:
    ```bash
@@ -64,7 +70,8 @@ skips quietly.
    ```
 
 To use a different Claude model, set the repository variable `CLAUDE_MODEL` (default
-`opus`). GitHub turns scheduled workflows off after 60 days without a commit; re-enable
+`opus`). To use a different image model, set `OPENAI_IMAGE_MODEL` (default
+`gpt-image-2.5-sunburst`; `gpt-image-2.5-flare` is faster). GitHub turns scheduled workflows off after 60 days without a commit; re-enable
 it under the repo's Actions tab if that happens.
 
 ## Run it locally
@@ -102,7 +109,7 @@ in-memory fake of Drive and Sheets that only works on the dev server:
 | Path | What |
 |---|---|
 | `src/config/app.config.ts` | Client ID, Sheet ID, Drive folder IDs (none of these are secret) |
-| `src/config/workflow.ts` | The 7 checklist steps, as data |
+| `src/config/workflow.ts` | The 8 checklist steps, as data |
 | `src/config/prompts.ts` | Prompts and director notes (kit prompts are drafts for now) |
 | `src/data/aiEdit.ts` | The AI edit prompt, the file contract, and which reel runs next |
 | `automation/` | The AI editor job and the refresh-token helper |

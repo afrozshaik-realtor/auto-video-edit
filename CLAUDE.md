@@ -23,7 +23,8 @@ Businesses must be data, not hard-coded, so more can be added later.
 
 1. Hosting: static site on GitHub Pages, with no server of our own. The AI edit runs as
    a scheduled GitHub Actions job (free on this public repo) using the owner's existing
-   Claude plan. No other paid services. (Changed with Afroz's approval, 2026-10-23.)
+   Claude plan. Thumbnails use OpenAI's Image API with the owner's API key (paid per
+   image). No other paid services. (Both changed at Afroz's request, 2026-10-23.)
 2. Video files never go in this repo. They live in Google Drive.
 3. Shared data lives in a Google Sheet ("Reel Tracker") read/written via the Sheets API.
 4. Auth: Google Identity Services (OAuth token model in the browser). Each user acts
@@ -39,7 +40,7 @@ Businesses must be data, not hard-coded, so more can be added later.
 8. GitHub Actions logs are public on this repo: the AI edit job prints reel ids and
    statuses only, never titles, transcripts, captions or file contents, and uploads no
    artifacts. Claude runs with only its own token and the stock API key in its
-   environment, never the Google secrets.
+   environment, never the Google or OpenAI secrets.
 
 ## Tech stack
 
@@ -79,8 +80,10 @@ Reels/
 - `Reels`: id, title, business, tags (comma-separated), stage, assignee, created_by,
   created_at, updated_at, drive_folder_id, final_video_link, posted_url, post_date,
   notes, ai_status (blank / queued / running / done / failed), ai_detail, ai_updated_at,
-  ai_runs, ai_notes (notes for a re-run), caption (written by the AI edit).
-  Schema version 2 added the ai_* and caption columns.
+  ai_runs, ai_notes (notes for a re-run), caption (written by the AI edit),
+  thumbnail_link, thumb_status (same values as ai_status), thumb_detail, thumb_prompt
+  (Claude's image prompt), thumb_notes (notes for a thumbnail redo).
+  Schema version 2 added the ai_* and caption columns; version 3 the thumbnail ones.
 - `Checklist`: reel_id, step_id, done (TRUE/FALSE), done_by, done_at, note
 - `Businesses`: id, name, short_code, accent_color, style_rules_md, active
 - `Tags`: tag, color (optional)
@@ -105,8 +108,8 @@ Define steps in `src/config/workflow.ts` as versioned data so steps can be added
 reordered or edited without touching UI code. Each step has: id, title, who
 (Claude / You / Both), required (bool), instructions (short, plain language),
 tool buttons, a "done when" line, and optionally `auto` (ticked by the AI edit job,
-not people) and a `panel` (AI status, caption, or review). Workflow version 3: nobody
-copies or pastes prompts.
+not people) and a `panel` (AI status, caption, thumbnail, or review). Workflow
+version 4: nobody copies or pastes prompts.
 
 | # | Step | Who | Done by | Tool buttons |
 |---|---|---|---|---|
@@ -114,11 +117,12 @@ copies or pastes prompts.
 | 2 | Upload the raw clip to the reel's `raw/` folder (own B-roll footage to `broll/`) | You | Person (or the job, when it finds the clip) | Open reel folder (Drive) |
 | 3 | AI edit: trim, Pass 01–02, B-roll plan and mix, Pass 03–05, director self-review, save | Claude | AI edit job | Open reel folder (Drive) |
 | 4 | AI caption and hashtags (shown with a Copy caption button) | Claude | AI edit job | — |
-| 5 | Optional polish (manual fixes, brand assets) | You | Person | CapCut, Canva |
-| 6 | Phone check: sound on and off, nothing under Instagram buttons, loudness OK. Director note chips add notes; "Re-run AI edit with these notes" queues a new version | You | Person | — |
-| 7 | Post and paste the posted URL | You | Person | Instagram |
+| 5 | AI thumbnail: Claude picks a reference frame and writes the image prompt; OpenAI's image model draws a 9:16 cover (preview in the app; "Make a new thumbnail" with optional notes redoes only the thumbnail) | Claude | AI edit job | — |
+| 6 | Optional polish (manual fixes, brand assets) | You | Person | CapCut, Canva |
+| 7 | Phone check: sound on and off, nothing under Instagram buttons, loudness OK. Director note chips add notes; "Re-run AI edit with these notes" queues a new version | You | Person | — |
+| 8 | Post (with the thumbnail as cover) and paste the posted URL | You | Person | Instagram |
 
-Required steps: all except 5 (6 required).
+Required steps: all except 6 (7 required).
 
 ### AI edit job
 - `.github/workflows/ai-edit.yml` runs every 10 minutes (and on demand). A quick check
@@ -138,6 +142,16 @@ Required steps: all except 5 (6 required).
   `final/cover.png` and `project/edit-vN/`, then sets ai_status=done, the caption, the
   final video link, and ticks the AI steps. One retry, then ai_status=failed with a
   short reason.
+- Thumbnail (`automation/thumbnail.ts`): during the edit Claude saves a reference frame
+  (`out/project/thumbnail-face.png`) and the image prompt (`out/thumbnail-prompt.txt`)
+  following the `thumbnail` brief in `prompts.ts`. After the edit the job sends both to
+  OpenAI's `/v1/images/edits` (model from the OPENAI_IMAGE_MODEL variable, default
+  `gpt-image-2.5-sunburst`, size 1088x1920, quality high), crops to 1080x1920 with
+  ffmpeg and uploads `final/thumbnail.png` (redos: `thumbnail-v2.png`, …). A thumbnail
+  failure never fails the edit. Redos (thumb_status=queued) run before edits: Claude
+  rewrites the saved prompt with the team's notes (`buildThumbnailRewritePrompt`), and
+  the job reuses the reference frame from the newest `project/edit-vN/`. With no
+  OPENAI_API_KEY the prompt is still saved and the step shows how to add the key.
 - Store the exact prompts from the kit in `src/config/prompts.ts` (setup, five passes,
   tighten-the-cut, director notes). The AI edit prompt embeds the pass, tighten,
   B-roll, caption and director-note prompts, and tells Claude to make every approval
@@ -180,8 +194,8 @@ All open in a new tab.
 
 1. **Board** (home): three lanes — Raw, Working, Completed — styled like tracks on an
    editing timeline, with each reel as a clip on its track. Clip shows title,
-   business color, tags, assignee, progress (x/6 required steps), and the AI edit
-   status when queued, running or failed. Completed lane collapsed by default, showing
+   business color, tags, assignee, progress (x/7 required steps), and the AI edit
+   or thumbnail status when queued, running or failed. Completed lane collapsed by default, showing
    the 10 most recent.
 2. **Filters** (on Board): business, tags (multi-select, match any/all), stage,
    assignee, text search. Filters reflected in the URL so a filtered view can be
@@ -192,7 +206,9 @@ All open in a new tab.
    tool buttons, per-step notes, Drive folder link, final video link, posted URL,
    activity history. The AI edit step shows live status (refreshed every minute while
    queued or running), "start now" and "try again" buttons; the caption step shows the
-   caption with a Copy caption button; the phone check offers re-run with notes.
+   caption with a Copy caption button; the thumbnail step shows a preview (loaded from
+   Drive with the viewer's sign-in) and "Make a new thumbnail"; the phone check offers
+   re-run with notes.
 5. **Library**: all prompts and director notes for quick copying outside a reel.
 6. **Settings**: businesses (name, color, style rules editor), tags (rename/merge/
    color), tools list, team members list (for assignee picker), app version +
@@ -262,6 +278,8 @@ moving correctly, on desktop and phone, by two different signed-in team members.
 **AI edit (0.3.0)**: the automated AI edit job, workflow v3, schema v2 with the
 migrations framework (`src/data/migrations.ts`).
 
+**AI thumbnail (0.4.0)**: thumbnail step with OpenAI images, workflow v4, schema v3.
+
 **Phase 2**: Settings (businesses, tags, tools, team), Library, activity history,
 URL-synced filters, dark mode polish, more tests for workflow logic.
 
@@ -289,5 +307,6 @@ URL-synced filters, dark mode polish, more tests for workflow logic.
    client; run `npm run ai:google-token` and sign in as the Reels owner; run
    `claude setup-token`; optionally get a free Pexels API key. Add the GitHub Actions
    secrets GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN,
-   CLAUDE_CODE_OAUTH_TOKEN and (optional) PEXELS_API_KEY. Optional repository
-   variable CLAUDE_MODEL (default `opus`).
+   CLAUDE_CODE_OAUTH_TOKEN, OPENAI_API_KEY (thumbnails) and (optional) PEXELS_API_KEY.
+   Optional repository variables CLAUDE_MODEL (default `opus`) and OPENAI_IMAGE_MODEL
+   (default `gpt-image-2.5-sunburst`).
