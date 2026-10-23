@@ -20,6 +20,10 @@ interface MockFile {
   name: string;
   mimeType: string;
   parents: string[];
+  createdTime?: string;
+  size?: string;
+  /** File contents, base64 (uploaded files only). */
+  content?: string;
 }
 interface Store {
   files: Record<string, MockFile>;
@@ -50,28 +54,87 @@ function err(status: number, message: string): Response {
   return json({ error: { code: status, message } }, status);
 }
 
-function parseA1(range: string): { tab: string; row: number } {
+function parseA1(range: string): { tab: string; row: number; col: number } {
   const [tab, cells = 'A1'] = decodeURIComponent(range).split('!');
-  const m = /^[A-Z]+(\d+)/.exec(cells);
-  return { tab, row: m ? Number(m[1]) : 1 };
+  const m = /^([A-Z]+)(\d+)/.exec(cells);
+  if (!m) return { tab, row: 1, col: 0 };
+  const col = [...m[1]].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1;
+  return { tab, row: Number(m[2]), col };
 }
 
-function writeAt(grid: string[][], startRow: number, values: string[][]) {
+function writeAt(grid: string[][], startRow: number, startCol: number, values: string[][]) {
   values.forEach((row, i) => {
-    grid[startRow - 1 + i] = [...row];
+    const target = [...(grid[startRow - 1 + i] ?? [])];
+    row.forEach((v, j) => (target[startCol + j] = v));
+    for (let k = 0; k < target.length; k++) target[k] ??= '';
+    grid[startRow - 1 + i] = target;
   });
   for (let i = 0; i < grid.length; i++) grid[i] ??= [];
 }
 
-function handle(method: string, url: URL, body: unknown, user: { email: string; name: string }): Response {
+function toBase64(buf: ArrayBuffer): string {
+  let s = '';
+  const bytes = new Uint8Array(buf);
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
+/** Dev/test helper: put a file with contents into the fake Drive. */
+export function mockPutFile(name: string, parentId: string, mimeType: string, data: ArrayBuffer): string {
+  const s = load();
+  const id = newId(s, 'fil_');
+  s.files[id] = {
+    id, name, mimeType, parents: [parentId], createdTime: new Date().toISOString(),
+    size: String(data.byteLength), content: toBase64(data),
+  };
+  save(s);
+  return id;
+}
+
+/** Dev/test helper: the fake Drive and sheets, for checking results. */
+export function mockStore(): Store {
+  return load();
+}
+
+const meta = ({ content: _content, ...f }: MockFile) => f;
+
+async function handle(method: string, url: URL, init: RequestInit | undefined, user: { email: string; name: string }): Promise<Response> {
   const s = load();
   const p = url.pathname;
+  const isJson = typeof init?.body === 'string';
+  const body: unknown = isJson ? JSON.parse(init!.body as string) : undefined;
+
+  // ----- OAuth (the AI editor job refreshing its token) -----
+  if (url.hostname === 'oauth2.googleapis.com' && p === '/token') return json({ access_token: 'mock-job-token', expires_in: 3600 });
+
+  // ----- Drive uploads -----
+  if (p === '/upload/drive/v3/files' && method === 'POST') {
+    const b = body as { name: string; mimeType: string; parents?: string[] };
+    const f: MockFile = { id: newId(s, 'fil_'), name: b.name, mimeType: b.mimeType, parents: b.parents ?? ['root'], createdTime: new Date().toISOString() };
+    s.files[f.id] = f;
+    save(s);
+    return new Response(null, { status: 200, headers: { Location: `https://www.googleapis.com/upload/mock-session/${f.id}` } });
+  }
+  const um = /^\/upload\/mock-session\/([^/]+)$/.exec(p);
+  if (um && method === 'PUT') {
+    const f = s.files[um[1]];
+    if (!f) return err(404, 'Upload session not found.');
+    const buf = await new Response(init?.body as BodyInit).arrayBuffer();
+    f.content = toBase64(buf);
+    f.size = String(buf.byteLength);
+    save(s);
+    return json(meta(f));
+  }
 
   // ----- Drive -----
   if (p === '/drive/v3/about') return json({ user: { emailAddress: user.email, displayName: user.name } });
+  if (p === '/drive/v3/files' && method === 'GET') {
+    const parent = /'([^']+)' in parents/.exec(url.searchParams.get('q') ?? '')?.[1];
+    return json({ files: Object.values(s.files).filter((f) => !parent || f.parents.includes(parent)).map(meta) });
+  }
   if (p === '/drive/v3/files' && method === 'POST') {
     const b = body as { name: string; mimeType: string; parents?: string[] };
-    const f: MockFile = { id: newId(s, 'fld_'), name: b.name, mimeType: b.mimeType, parents: b.parents ?? ['root'] };
+    const f: MockFile = { id: newId(s, 'fld_'), name: b.name, mimeType: b.mimeType, parents: b.parents ?? ['root'], createdTime: new Date().toISOString() };
     s.files[f.id] = f;
     save(s);
     return json(f);
@@ -80,6 +143,10 @@ function handle(method: string, url: URL, body: unknown, user: { email: string; 
   if (fm) {
     const f = s.files[decodeURIComponent(fm[1])];
     if (!f) return err(404, 'File not found.');
+    if (url.searchParams.get('alt') === 'media') {
+      const bin = atob(f.content ?? '');
+      return new Response(Uint8Array.from(bin, (c) => c.charCodeAt(0)), { status: 200 });
+    }
     if (method === 'PATCH') {
       const add = url.searchParams.get('addParents');
       const remove = (url.searchParams.get('removeParents') ?? '').split(',').filter(Boolean);
@@ -88,7 +155,7 @@ function handle(method: string, url: URL, body: unknown, user: { email: string; 
       if (f.parents.length > 1) return err(403, 'Increasing the number of parents is not allowed.');
       save(s);
     }
-    return json(f);
+    return json(meta(f));
   }
 
   // ----- Sheets -----
@@ -112,8 +179,8 @@ function handle(method: string, url: URL, body: unknown, user: { email: string; 
     }
     if (op === 'batchUpdate') {
       for (const d of (body as { data: { range: string; values: string[][] }[] }).data) {
-        const { tab, row } = parseA1(d.range);
-        writeAt((book[tab] ??= []), row, d.values);
+        const { tab, row, col } = parseA1(d.range);
+        writeAt((book[tab] ??= []), row, col, d.values);
       }
       save(s);
       return json({});
@@ -125,14 +192,16 @@ function handle(method: string, url: URL, body: unknown, user: { email: string; 
       return json({});
     }
     if (method === 'PUT') {
-      const { tab, row } = parseA1(rest);
-      writeAt((book[tab] ??= []), row, (body as { values: string[][] }).values);
+      const { tab, row, col } = parseA1(rest);
+      writeAt((book[tab] ??= []), row, col, (body as { values: string[][] }).values);
       save(s);
       return json({});
     }
   }
   return err(400, `Mock doesn’t handle ${method} ${p}`);
 }
+
+let schemaV1 = false;
 
 function seed() {
   localStorage.removeItem(STORE_KEY);
@@ -150,28 +219,36 @@ function seed() {
     completed: mk(DRIVE_FOLDER_NAMES.completed, root),
   };
   const sheetId = newId(s, 'sht_');
-  const reels: string[][] = [[...TABS.Reels]];
+  const v1 = schemaV1; // ?seed&v1: an old sheet, to test the migration
+  const reelHeaders = v1 ? TABS.Reels.slice(0, 14) : [...TABS.Reels];
+  const reels: string[][] = [reelHeaders];
   const checklist: string[][] = [[...TABS.Checklist]];
-  const demo: [string, string, string, 'raw' | 'working' | 'completed', string, number][] = [
-    ['First-time buyer mistakes', 'tce', 'buyers, tips', 'raw', 'afroz@example.com', 2],
-    ['Is your basement legal? Permits 101', 'amb', 'permits, basements', 'raw', 'sam@example.com', 0],
-    ['Phishing red flags in 30 seconds', 'drc', 'email, tips', 'working', 'sam@example.com', 7],
-    ['Walkout basement before and after', 'amb', 'basements, before-after', 'working', 'afroz@example.com', 11],
-    ['What closing costs really include', 'tce', 'buyers, money', 'working', 'afroz@example.com', 4],
-    ['Password managers explained', 'drc', 'passwords, tips', 'completed', 'sam@example.com', workflow.steps.length],
-    ['Pre-approval vs pre-qualification', 'tce', 'buyers, money', 'completed', 'afroz@example.com', workflow.steps.length],
+  const caption = 'Three things nobody tells you before your first offer.\n\n#realestate #firsttimebuyer #homebuying';
+  // [title, business, tags, stage, assignee, steps done, ai_status, ai_detail]
+  const demo: [string, string, string, 'raw' | 'working' | 'completed', string, number, string, string][] = [
+    ['First-time buyer mistakes', 'tce', 'buyers, tips', 'raw', 'afroz@example.com', 1, '', ''],
+    ['Is your basement legal? Permits 101', 'amb', 'permits, basements', 'raw', 'sam@example.com', 0, '', ''],
+    ['Phishing red flags in 30 seconds', 'drc', 'email, tips', 'working', 'sam@example.com', 2, 'running', 'Pass 02: cut-out'],
+    ['Walkout basement before and after', 'amb', 'basements, before-after', 'working', 'afroz@example.com', 4, 'done', 'Finished edit 1'],
+    ['What closing costs really include', 'tce', 'buyers, money', 'working', 'afroz@example.com', 2, 'failed', 'The AI editor ran out of turns.'],
+    ['Password managers explained', 'drc', 'passwords, tips', 'completed', 'sam@example.com', workflow.steps.length, 'done', 'Finished edit 1'],
+    ['Pre-approval vs pre-qualification', 'tce', 'buyers, money', 'completed', 'afroz@example.com', workflow.steps.length, 'done', 'Finished edit 2'],
   ];
-  demo.forEach(([title, biz, tags, stage, assignee, doneCount], i) => {
+  demo.forEach(([title, biz, tags, stage, assignee, doneCount, aiStatus, aiDetail], i) => {
     const id = `r-demo${i}`;
     const date = new Date(2026, 9, 10 + i);
     const folder = mk(`2026-10-${10 + i}_${biz.toUpperCase()}_${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, folders[stage]);
     for (const sub of REEL_SUBFOLDERS) mk(sub, folder);
     const iso = date.toISOString();
-    reels.push([
-      id, title, biz, tags, stage, assignee, 'afroz@example.com', iso, iso, folder, '',
+    const finished = aiStatus === 'done';
+    const row = [
+      id, title, biz, tags, stage, assignee, 'afroz@example.com', iso, iso, folder,
+      finished ? 'https://drive.google.com/file/d/demo/view' : '',
       stage === 'completed' ? 'https://www.instagram.com/reel/demo' : '', stage === 'completed' ? '2026-10-18' : '', '',
-    ]);
-    workflow.steps.slice(0, doneCount).forEach((step) => checklist.push([id, step.id, 'TRUE', assignee, iso, '']));
+    ];
+    if (!v1) row.push(aiStatus, aiDetail, aiStatus ? new Date().toISOString() : '', finished ? '1' : '', '', finished ? caption : '');
+    reels.push(row);
+    workflow.steps.slice(0, doneCount).forEach((step) => checklist.push([id, step.id, 'TRUE', step.auto ? 'Reel Studio AI' : assignee, iso, '']));
   });
   s.sheets[sheetId] = {
     Reels: reels,
@@ -179,7 +256,7 @@ function seed() {
     Businesses: [[...TABS.Businesses], ...SEED_BUSINESSES.map((b) => recordToRow([...TABS.Businesses], businessToRecord(b)))],
     Tags: [[...TABS.Tags], ...['buyers', 'tips', 'permits', 'basements', 'email', 'before-after', 'money', 'passwords'].map((t) => [t, ''])],
     Activity: [[...TABS.Activity]],
-    Meta: [[...TABS.Meta], ['schema_version', String(SCHEMA_VERSION)]],
+    Meta: [[...TABS.Meta], ['schema_version', v1 ? '1' : String(SCHEMA_VERSION)]],
   };
   s.files[sheetId] = { id: sheetId, name: 'Reel Tracker', mimeType: 'application/vnd.google-apps.spreadsheet', parents: [root] };
   save(s);
@@ -194,6 +271,7 @@ export function installMockGoogle() {
     localStorage.removeItem(STORE_KEY);
     localStorage.removeItem(IDS_KEY);
   }
+  schemaV1 = params.has('v1');
   if (params.has('seed') && !localStorage.getItem(STORE_KEY)) seed();
 
   (window as { __reelStudioMock?: boolean }).__reelStudioMock = true;
@@ -201,9 +279,8 @@ export function installMockGoogle() {
   window.fetch = async (input, init) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
     if (!/googleapis\.com$/.test(url.hostname)) return realFetch(input, init);
-    await new Promise((r) => setTimeout(r, 120));
-    const body = init?.body ? JSON.parse(String(init.body)) : undefined;
-    return handle(init?.method ?? 'GET', url, body, user);
+    if (typeof document !== 'undefined') await new Promise((r) => setTimeout(r, 120));
+    return handle(init?.method ?? 'GET', url, init, user);
   };
 
   // Fake Google Identity Services: sign-in succeeds immediately.
