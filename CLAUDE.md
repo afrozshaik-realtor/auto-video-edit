@@ -88,7 +88,8 @@ Reels/
 - `Businesses`: id, name, short_code, accent_color, style_rules_md, active
 - `Tags`: tag, color (optional)
 - `Activity`: timestamp, user, reel_id, action, detail
-- `Meta`: key, value (store `schema_version` here)
+- `Meta`: key, value (`schema_version`; `ai_last_check`, written by the AI edit job on
+  every check so the app can show whether the editor is alive)
 
 Schema changes must ship with a migration function in `src/data/migrations.ts`,
 keyed by schema version, run on load by the first user with edit access.
@@ -134,8 +135,10 @@ Required steps: all except 6 (7 required).
 - For each reel it sets ai_status=running, moves the folder to Working, ticks Upload,
   unticks the AI steps and the phone check, downloads the clip and `broll/` files, and
   runs Claude Code headless with the single prompt from `src/data/aiEdit.ts`
-  (`buildAiEditPrompt`). Claude writes its current step to `status.txt`, which the job
-  copies to ai_detail.
+  (`buildAiEditPrompt`). Claude writes its current step heading (plus a rough
+  percentage during long steps, e.g. "Pass 02: cut-out 40%") to `status.txt`, which the
+  job copies to ai_detail. `src/data/aiProgress.ts` maps that to the progress bar
+  (stages and weights in `AI_STAGES`, which must match the prompt headings).
 - Outputs (the contract in `AI_FILES`): `out/final.mp4` (1080x1920, checked with
   ffprobe), `out/cover.png`, `out/caption.txt`, `out/project/`. The job uploads them to
   `final/final.mp4` (re-runs: `final-v2.mp4`, …; nothing is overwritten or deleted),

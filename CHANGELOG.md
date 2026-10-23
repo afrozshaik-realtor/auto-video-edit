@@ -3,6 +3,19 @@
 All notable changes to Reel Studio. The version shown in the app comes from
 `APP_VERSION` in `src/config/app.config.ts`.
 
+## 0.4.1 — 2026-10-23
+
+### Added
+- **AI edit progress bar.** It shows the overall percentage, the current step (for
+  example "Pass 02: cut-out (40% of this step)") and "Step 5 of 14". An "All steps"
+  list ticks off each stage as it finishes. The board shows the percentage on each
+  reel too.
+- The step reports **when the AI editor last checked for work**. If it has never
+  checked in, or has gone quiet, a warning explains what to fix, instead of a reel
+  sitting on "Queued" with no explanation.
+- The AI editor job now writes the time of each check to the sheet's Meta tab, under
+  `ai_last_check`, and Claude reports a rough percentage during long steps.
+
 ## 0.4.0 — 2026-10-23
 
 ### Added

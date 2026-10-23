@@ -202,6 +202,7 @@ async function handle(method: string, url: URL, init: RequestInit | undefined, u
 }
 
 let schemaV1 = false;
+let noHeartbeat = false;
 
 function seed() {
   localStorage.removeItem(STORE_KEY);
@@ -231,7 +232,7 @@ function seed() {
   const demo: [string, string, string, 'raw' | 'working' | 'completed', string, number, string, string][] = [
     ['First-time buyer mistakes', 'tce', 'buyers, tips', 'raw', 'afroz@example.com', 1, '', ''],
     ['Is your basement legal? Permits 101', 'amb', 'permits, basements', 'raw', 'sam@example.com', 0, '', ''],
-    ['Phishing red flags in 30 seconds', 'drc', 'email, tips', 'working', 'sam@example.com', 2, 'running', 'Pass 02: cut-out'],
+    ['Phishing red flags in 30 seconds', 'drc', 'email, tips', 'working', 'sam@example.com', 2, 'running', 'Pass 02: cut-out 40%'],
     ['Walkout basement before and after', 'amb', 'basements, before-after', 'working', 'afroz@example.com', 5, 'done', 'Finished edit 1'],
     ['What closing costs really include', 'tce', 'buyers, money', 'working', 'afroz@example.com', 2, 'failed', 'The AI editor ran out of turns.'],
     ['Password managers explained', 'drc', 'passwords, tips', 'completed', 'sam@example.com', workflow.steps.length, 'done', 'Finished edit 1'],
@@ -271,7 +272,12 @@ function seed() {
     Businesses: [[...TABS.Businesses], ...SEED_BUSINESSES.map((b) => recordToRow([...TABS.Businesses], businessToRecord(b)))],
     Tags: [[...TABS.Tags], ...['buyers', 'tips', 'permits', 'basements', 'email', 'before-after', 'money', 'passwords'].map((t) => [t, ''])],
     Activity: [[...TABS.Activity]],
-    Meta: [[...TABS.Meta], ['schema_version', v1 ? '1' : String(SCHEMA_VERSION)]],
+    Meta: [
+      [...TABS.Meta],
+      ['schema_version', v1 ? '1' : String(SCHEMA_VERSION)],
+      // ?seed&nocheck: the AI editor has never checked in.
+      ...(noHeartbeat ? [] : [['ai_last_check', new Date(Date.now() - 4 * 60000).toISOString()]]),
+    ],
   };
   s.files[sheetId] = { id: sheetId, name: 'Reel Tracker', mimeType: 'application/vnd.google-apps.spreadsheet', parents: [root] };
   save(s);
@@ -287,6 +293,7 @@ export function installMockGoogle() {
     localStorage.removeItem(IDS_KEY);
   }
   schemaV1 = params.has('v1');
+  noHeartbeat = params.has('nocheck');
   if (params.has('seed') && !localStorage.getItem(STORE_KEY)) seed();
 
   (window as { __reelStudioMock?: boolean }).__reelStudioMock = true;
