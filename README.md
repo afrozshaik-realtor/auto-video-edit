@@ -32,12 +32,15 @@ skips quietly.
    warning when signing in; that's expected for your own app.
 2. **Create a Desktop OAuth client.** Google Auth Platform → Clients → Create client →
    Application type **Desktop app**. Keep its client ID and client secret.
-3. **Make the job's Google refresh token.** On your computer, in this repo:
+3. **Make the job's Google sign-in and save it.** On your computer, in this repo, run:
    ```bash
    npm run ai:google-token
    ```
-   Paste the Desktop client ID and secret, open the link, and sign in as the account
-   that owns the `Reels` folder. It prints a refresh token.
+   Paste the **Desktop** client's ID and secret (not the website's client), open the
+   link, and sign in as the account that owns the `Reels` folder. When it asks to save
+   to GitHub secrets, type **y**. It saves `GOOGLE_OAUTH_CLIENT_ID`,
+   `GOOGLE_OAUTH_CLIENT_SECRET` and `GOOGLE_REFRESH_TOKEN` together, so they always
+   match. Don't set those three by hand.
 4. **Make a Claude token from your plan.** With [Claude Code](https://code.claude.com) installed:
    ```bash
    claude setup-token
@@ -48,17 +51,10 @@ skips quietly.
 6. **Optional: free stock footage.** Get a free API key at
    https://www.pexels.com/api/. Without it, B-roll is built by Claude or taken from the
    reel's `broll/` folder.
-7. **Add the secrets.** Run each of these and paste the value when asked. They're
-   stored encrypted in GitHub, never in the repo:
-   ```bash
-   gh secret set GOOGLE_OAUTH_CLIENT_ID
-   ```
-   ```bash
-   gh secret set GOOGLE_OAUTH_CLIENT_SECRET
-   ```
-   ```bash
-   gh secret set GOOGLE_REFRESH_TOKEN
-   ```
+7. **Add the other secrets.** These boxes are *commands*. The copy button copies the
+   command, not your key. Paste each command into your terminal and press Enter.
+   `gh` then asks "Paste your secret:", and that's when you paste the token or key from
+   step 4, 5 or 6. They're stored encrypted in GitHub, never in the repo.
    ```bash
    gh secret set CLAUDE_CODE_OAUTH_TOKEN
    ```
