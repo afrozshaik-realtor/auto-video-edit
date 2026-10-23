@@ -1330,6 +1330,94 @@ select.input {
 .clip-ai + .clip-foot {
   margin-top: 0;
 }
+.ai-progress {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+}
+.ai-progress p {
+  margin: 0;
+}
+.ai-progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.ai-progress-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.ai-progress-pct {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.ai-progress-bar {
+  position: relative;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.ai-progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: var(--playhead);
+  transition: width 0.6s ease;
+}
+.ai-progress-bar.is-done span {
+  background: var(--success);
+}
+.ai-progress-bar.is-unknown span {
+  width: 30%;
+  animation: ai-slide 1.6s ease-in-out infinite;
+}
+@keyframes ai-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+.ai-stage-list {
+  margin: 6px 0 0;
+  padding-left: 22px;
+  display: grid;
+  gap: 2px;
+  font-size: 14px;
+}
+.ai-stage-list .is-done {
+  color: var(--muted);
+}
+.ai-stage-list .is-done::marker {
+  content: '✓  ';
+  color: var(--success);
+}
+.ai-stage-list .is-current {
+  font-weight: 600;
+  color: var(--ink);
+}
+.ai-stage-list .is-current::marker {
+  content: '●  ';
+  color: var(--playhead);
+}
+.ai-stage-list .is-todo {
+  color: var(--ink-2);
+}
+.ai-warning {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+  font-size: 14px;
+}
+
 .thumb-preview {
   display: block;
   width: min(240px, 100%);

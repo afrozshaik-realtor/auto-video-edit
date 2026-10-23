@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from 'react';
 import { getPrompt, renderPrompt, type PromptContext } from '../config/prompts';
 import type { WorkflowStep } from '../config/workflow';
+import { AI_STAGES, editorHealth, progressFromDetail, reelProgress } from '../data/aiProgress';
 import type { Reel } from '../data/types';
 import { downloadFile, folderUrl } from '../services/google/drive';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -24,8 +25,11 @@ export function aiStatusLine(reel: Reel): string | null {
   switch (reel.aiStatus) {
     case 'queued':
       return 'AI edit queued';
-    case 'running':
+    case 'running': {
+      const p = progressFromDetail(reel.aiDetail);
+      if (p.percent !== null) return `AI editing ${p.percent}%: ${AI_STAGES[p.stageIndex].label}`;
       return reel.aiDetail ? `AI editing: ${reel.aiDetail}` : 'AI editing';
+    }
     case 'failed':
       return 'AI edit failed';
     default:
@@ -161,7 +165,90 @@ export function ThumbnailPanel({ reel, onQueue }: { reel: Reel; onQueue: (notes:
   );
 }
 
-export function AiEditPanel({ reel, onQueue }: { reel: Reel; onQueue: (notes: string) => Promise<void> }) {
+/** Is the AI editor job alive? Based on the heartbeat it writes on every check. */
+export function EditorHealthNote({ lastCheck }: { lastCheck: string | undefined }) {
+  const health = editorHealth(lastCheck);
+  if (health === 'ok') return <p className="muted small">The AI editor last checked for work {timeAgo(lastCheck!)}.</p>;
+  if (health === 'stale')
+    return (
+      <p className="ai-warning">
+        The AI editor last checked for work {timeAgo(lastCheck!)}, so it may have stopped. Ask the owner to look at the
+        repo’s Actions tab. GitHub pauses scheduled jobs after 60 days without a commit.
+      </p>
+    );
+  return (
+    <p className="ai-warning">
+      The AI editor hasn’t checked in yet, so nothing will start. The owner needs to finish setting it up: add the Google
+      and Claude secrets on GitHub (README, “Set up the AI editor”).
+    </p>
+  );
+}
+
+/** Overall progress through the AI edit, with the current stage and the full stage list. */
+export function AiProgressBar({ reel }: { reel: Reel }) {
+  const p = reelProgress(reel);
+  const running = reel.aiStatus === 'running';
+  const unknown = running && p.percent === null;
+  const current = p.stageIndex >= 0 && p.stageIndex < AI_STAGES.length ? AI_STAGES[p.stageIndex] : null;
+  const label =
+    reel.aiStatus === 'done'
+      ? 'Finished'
+      : reel.aiStatus === 'queued'
+        ? 'Waiting to start'
+        : current
+          ? current.label + (p.stagePercent !== null ? ` (${p.stagePercent}% of this step)` : '')
+          : reel.aiDetail || 'Working';
+
+  return (
+    <div className="ai-progress">
+      <div className="ai-progress-head">
+        <span className="ai-progress-label">
+          {running && <span className="ai-dot" aria-hidden="true" />}
+          {label}
+        </span>
+        <span className="mono ai-progress-pct">{unknown ? '' : `${p.percent ?? 0}%`}</span>
+      </div>
+      <div
+        className={`ai-progress-bar${unknown ? ' is-unknown' : ''}${reel.aiStatus === 'done' ? ' is-done' : ''}`}
+        role="progressbar"
+        aria-label="AI edit progress"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={unknown ? undefined : (p.percent ?? 0)}
+        aria-valuetext={unknown ? label : `${p.percent ?? 0}%, ${label}`}
+      >
+        <span style={{ width: unknown ? undefined : `${p.percent ?? 0}%` }} />
+      </div>
+      {p.position && <p className="muted small">{p.position}</p>}
+      {(running || reel.aiStatus === 'queued') && (
+        <details className="stuck">
+          <summary>All steps</summary>
+          <ol className="ai-stage-list">
+            {AI_STAGES.map((s, i) => {
+              const state = i < p.stageIndex ? 'done' : i === p.stageIndex ? 'current' : 'todo';
+              return (
+                <li key={s.label} className={`is-${state}`}>
+                  <span className="sr-only">{state === 'done' ? 'Done: ' : state === 'current' ? 'Now: ' : ''}</span>
+                  {s.label}
+                </li>
+              );
+            })}
+          </ol>
+        </details>
+      )}
+    </div>
+  );
+}
+
+export function AiEditPanel({
+  reel,
+  lastCheck,
+  onQueue,
+}: {
+  reel: Reel;
+  lastCheck: string | undefined;
+  onQueue: (notes: string) => Promise<void>;
+}) {
   const [busy, setBusy] = useState(false);
   const queue = async () => {
     setBusy(true);
@@ -176,20 +263,23 @@ export function AiEditPanel({ reel, onQueue }: { reel: Reel; onQueue: (notes: st
   switch (reel.aiStatus) {
     case 'queued':
       body = (
-        <p>
-          Queued. The AI editor checks for work every {AI_CHECK_EVERY}, so it should start soon.
-        </p>
+        <>
+          <AiProgressBar reel={reel} />
+          <p>
+            Queued. The AI editor checks for work every {AI_CHECK_EVERY} (GitHub sometimes runs it late), then the bar
+            starts moving.
+          </p>
+          <EditorHealthNote lastCheck={lastCheck} />
+        </>
       );
       break;
     case 'running':
       body = (
         <>
-          <p className="ai-now">
-            <span className="ai-dot" aria-hidden="true" />
-            {reel.aiDetail || 'Editing'}
-          </p>
+          <AiProgressBar reel={reel} />
           <p className="muted small">
-            Updated {timeAgo(reel.aiUpdatedAt)}. A full edit usually takes 30–90 minutes. You can close this page.
+            Last update {timeAgo(reel.aiUpdatedAt)}. A full edit usually takes 30–90 minutes. You can close this page;
+            it keeps going.
           </p>
         </>
       );
@@ -197,6 +287,7 @@ export function AiEditPanel({ reel, onQueue }: { reel: Reel; onQueue: (notes: st
     case 'done':
       body = (
         <>
+          <AiProgressBar reel={reel} />
           <p className="success-line">{reel.aiDetail || 'Finished'}.</p>
           <div className="tool-row">
             {reel.finalVideoLink && (
@@ -230,6 +321,7 @@ export function AiEditPanel({ reel, onQueue }: { reel: Reel; onQueue: (notes: st
             Waiting for the raw clip. Once it’s in the reel’s raw folder, the AI edit starts by itself within about{' '}
             {AI_CHECK_EVERY}.
           </p>
+          <EditorHealthNote lastCheck={lastCheck} />
           <button type="button" className="btn btn-secondary btn-small" onClick={queue} disabled={busy}>
             {busy ? 'Queuing…' : 'I’ve uploaded it: start the AI edit'}
           </button>

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { workflow } from '../config/workflow';
 import { AiEditPanel, aiStatusLine, CaptionPanel, ReviewPanel, ThumbnailPanel } from '../components/AiPanels';
 import { BusinessChip } from '../components/BusinessChip';
+import { AI_HEARTBEAT_KEY } from '../data/aiProgress';
 import { shortName } from '../components/ClipCard';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Icon } from '../components/Icon';
@@ -160,7 +161,11 @@ export function ReelScreen() {
                   }}
                   panel={
                     step.panel === 'ai-edit' ? (
-                      <AiEditPanel reel={reel} onQueue={(notes) => queueAiEdit(reel, notes)} />
+                      <AiEditPanel
+                        reel={reel}
+                        lastCheck={data.meta[AI_HEARTBEAT_KEY]}
+                        onQueue={(notes) => queueAiEdit(reel, notes)}
+                      />
                     ) : step.panel === 'ai-caption' ? (
                       <CaptionPanel reel={reel} />
                     ) : step.panel === 'ai-thumbnail' ? (
