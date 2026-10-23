@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Privacy Policy · Reel Studio</title>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="stylesheet" href="./legal.css" />
+  </head>
+  <body>
+    <header>
+      <a href="./">
+        <img src="./favicon.svg" width="22" height="22" alt="" />
+        Reel Studio
+      </a>
+    </header>
+    <main>
+      <h1>Privacy Policy</h1>
+      <p class="meta">Effective 23 October 2026</p>
+
+      <div class="summary">
+        <p><strong>In short:</strong></p>
+        <ul>
+          <li>Reel Studio is a private tool for a small team. It has no servers or database of its own.</li>
+          <li>Your reels, videos and tracking data stay in the Google Drive folder and Google Sheet the owner shares with you.</li>
+          <li>To edit videos automatically, clips are processed by Anthropic (Claude), and one still frame is sent to OpenAI to make a thumbnail.</li>
+          <li>We don’t sell data, show ads, use analytics or tracking cookies, or use your Google data to train AI models.</li>
+        </ul>
+      </div>
+
+      <h2>Who we are</h2>
+      <p>
+        Reel Studio (“the app”, “we”) is a web app at
+        <a href="https://afrozshaik-realtor.github.io/auto-video-edit/">afrozshaik-realtor.github.io/auto-video-edit</a>,
+        run by Afroz Shaik (“the owner”). It helps a small team produce short-form videos (“reels”) for AM Builders,
+        TCE (Real Estate) and Dr Cyber. Only people the owner invites can use it. Questions about this policy go to
+        <a href="mailto:afroz.shaik.realtor@gmail.com">afroz.shaik.realtor@gmail.com</a>.
+      </p>
+
+      <h2>What the app accesses</h2>
+      <p>When you sign in with Google, the app asks for permission to use:</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Google permission</th>
+              <th scope="col">What the app does with it</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Your name and email address (read from your Google Drive account details)</td>
+              <td>Shows who is signed in, and records who ticked a step or changed a reel (for example “Done by …”).</td>
+            </tr>
+            <tr>
+              <td>Google Drive (see, edit, create and delete your Drive files)</td>
+              <td>
+                Works only inside the shared <strong>Reels</strong> folder. It creates reel folders, moves them between the Raw,
+                Working and Completed folders, reads raw clips and B-roll, and saves finished videos, thumbnails and project
+                files. It does not open, list or change files outside that folder, and it never deletes files.
+              </td>
+            </tr>
+            <tr>
+              <td>Google Sheets (see, edit, create and delete your spreadsheets)</td>
+              <td>
+                Reads and writes the <strong>Reel Tracker</strong> sheet: reels, checklist ticks, notes, captions, businesses,
+                tags and an activity log. It does not open any other spreadsheet.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Google only offers the Drive permission for all of your Drive, so it covers all your files. The app uses it only for
+        the shared Reels folder: it has to move folders that teammates created and read clips uploaded through the Drive
+        website.
+      </p>
+
+      <h2>Where your data is kept</h2>
+      <ul>
+        <li>
+          <strong>Google Drive and Google Sheets.</strong> All reels, videos, captions, thumbnails, notes and activity are
+          stored in the owner’s Reels folder and Reel Tracker sheet, under Google’s terms. Reel Studio has no servers or
+          database of its own.
+        </li>
+        <li>
+          <strong>Your browser.</strong> While you’re signed in, your Google access token (it expires after about an hour)
+          is kept in your browser’s session storage and cleared when you close the tab. Your light or dark theme choice is
+          kept in local storage. The app sets no cookies.
+        </li>
+      </ul>
+
+      <h2>The automated AI editor</h2>
+      <p>
+        When a raw clip is added to a reel, an automated job edits it. The job runs on GitHub Actions and signs in to Google
+        as the owner’s account. It:
+      </p>
+      <ul>
+        <li>
+          downloads that reel’s raw clip and its B-roll files, and reads the reel’s title, business, tags, style rules and any
+          notes from the team;
+        </li>
+        <li>
+          sends them to <strong>Anthropic’s Claude</strong>, which edits the video and writes the caption and the thumbnail
+          prompt. The video, its speech and the transcript are processed to make the edit;
+        </li>
+        <li>
+          sends <strong>one still frame of the presenter and an image prompt</strong> to <strong>OpenAI’s Image API</strong>
+          to draw the thumbnail;
+        </li>
+        <li>
+          may send short search terms (never your video) to <strong>Pexels</strong> to find free stock footage;
+        </li>
+        <li>
+          saves the results to the reel’s folder in Drive and updates the Reel Tracker sheet.
+        </li>
+      </ul>
+      <p>
+        The job’s working copies are deleted when it finishes; GitHub erases the machine after every run. Because this
+        project’s code is public, the job’s logs are public too, so they record only reel ID numbers and progress. They never
+        contain titles, transcripts, captions, images or video.
+      </p>
+
+      <h2>Who else processes your data</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Service</th>
+              <th scope="col">Why</th>
+              <th scope="col">Their policy</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Google</td>
+              <td>Sign-in, Drive and Sheets storage</td>
+              <td><a href="https://policies.google.com/privacy">policies.google.com/privacy</a></td>
+            </tr>
+            <tr>
+              <td>GitHub (Microsoft)</td>
+              <td>Hosts the website and runs the AI editor job</td>
+              <td>
+                <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub Privacy Statement</a>
+              </td>
+            </tr>
+            <tr>
+              <td>Anthropic</td>
+              <td>Claude edits the video and writes captions and thumbnail prompts</td>
+              <td><a href="https://www.anthropic.com/legal/privacy">anthropic.com/legal/privacy</a></td>
+            </tr>
+            <tr>
+              <td>OpenAI</td>
+              <td>Draws the thumbnail from one frame and a prompt</td>
+              <td><a href="https://openai.com/policies/privacy-policy/">openai.com/policies/privacy-policy</a></td>
+            </tr>
+            <tr>
+              <td>Pexels</td>
+              <td>Free stock footage search (search terms only)</td>
+              <td><a href="https://www.pexels.com/privacy-policy/">pexels.com/privacy-policy</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>We don’t share data with anyone else, except where the law requires it.</p>
+
+      <h2>Google API Services: Limited Use</h2>
+      <p>
+        Reel Studio’s use and transfer to any other app of information received from Google APIs will adhere to the
+        <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>,
+        including the Limited Use requirements. Specifically:
+      </p>
+      <ul>
+        <li>Google user data is used only to provide the app’s features described above, which you can see in the app.</li>
+        <li>
+          It is transferred to others only to provide those features (the AI editing and thumbnail services above), to
+          comply with the law, or as part of a merger or sale with notice to users.
+        </li>
+        <li>It is never sold, used for advertising, or used to determine creditworthiness or for lending.</li>
+        <li>
+          It is never used to develop, improve or train general AI or machine-learning models. Anthropic and OpenAI receive it
+          through their business APIs, whose terms say API data isn’t used to train their models by default.
+        </li>
+        <li>
+          No person reads it except the team members it is shared with, or the owner when you ask for help, when it’s needed
+          for security, or when the law requires it.
+        </li>
+      </ul>
+
+      <h2>How long data is kept</h2>
+      <p>
+        Reels, videos and tracking data stay in the Reels folder and Reel Tracker sheet until the owner deletes them. The app
+        itself never deletes files. Anthropic and OpenAI may keep API inputs and outputs for a limited time under their own
+        policies, for example to detect abuse.
+      </p>
+
+      <h2>Your choices</h2>
+      <ul>
+        <li>
+          <strong>Sign out</strong> from the account menu in the app. This removes your access token from the browser.
+        </li>
+        <li>
+          <strong>Revoke access</strong> at any time at
+          <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a> by removing Reel Studio.
+        </li>
+        <li>
+          <strong>Ask for a copy, a correction or deletion</strong> of data about you (for example your name in the activity
+          log) by emailing the owner. Leaving the team ends your access when the owner stops sharing the folder with you.
+        </li>
+      </ul>
+
+      <h2>Security</h2>
+      <p>
+        All connections use HTTPS. The app’s credentials for the AI editor are kept encrypted in GitHub, never in the code.
+        Only the owner can change them. Access to reels is controlled by Google Drive sharing.
+      </p>
+
+      <h2>Children</h2>
+      <p>Reel Studio is a work tool for adults and isn’t directed at children under 13.</p>
+
+      <h2>Changes to this policy</h2>
+      <p>
+        If this policy changes, we’ll update this page and its effective date, and tell the team about significant changes.
+      </p>
+
+      <h2>Contact</h2>
+      <p>
+        Afroz Shaik · <a href="mailto:afroz.shaik.realtor@gmail.com">afroz.shaik.realtor@gmail.com</a> · Alberta, Canada
+      </p>
+
+      <footer>
+        <a href="./">Reel Studio</a>
+        <a href="./terms.html">Terms of Service</a>
+      </footer>
+    </main>
+  </body>
+</html>

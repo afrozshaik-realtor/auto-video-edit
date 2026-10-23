@@ -1,0 +1,131 @@
+/* Shared styles for the Privacy Policy and Terms of Service pages. */
+:root {
+  --bg: #f4f2ed;
+  --surface: #ffffff;
+  --ink: #1b1a17;
+  --ink-2: #47443d;
+  --muted: #66625a;
+  --line: #dcd8ce;
+  --playhead: #cf3f2a;
+  --focus: #1f5fd1;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121211;
+    --surface: #1c1b19;
+    --ink: #ecebe6;
+    --ink-2: #c8c5bc;
+    --muted: #a29e94;
+    --line: #322f2b;
+    --playhead: #f06450;
+    --focus: #82adff;
+    color-scheme: dark;
+  }
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+header {
+  border-bottom: 1px solid var(--line);
+  padding: 14px 16px;
+}
+header a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 16px 64px;
+}
+h1 {
+  font-size: 30px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  margin: 0 0 6px;
+}
+h2 {
+  font-size: 19px;
+  line-height: 1.3;
+  margin: 36px 0 8px;
+}
+h3 {
+  font-size: 16px;
+  margin: 20px 0 4px;
+}
+p,
+ul {
+  margin: 0 0 12px;
+}
+ul {
+  padding-left: 22px;
+}
+li {
+  margin-bottom: 4px;
+}
+a {
+  color: inherit;
+}
+a:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.meta {
+  color: var(--muted);
+  font-size: 15px;
+}
+.summary {
+  margin: 24px 0;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--playhead);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.summary p:last-child,
+.summary ul:last-child {
+  margin-bottom: 0;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 16px;
+  font-size: 15px;
+}
+th,
+td {
+  text-align: left;
+  vertical-align: top;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+th {
+  font-weight: 600;
+}
+.table-wrap {
+  overflow-x: auto;
+}
+footer {
+  margin-top: 48px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 15px;
+}
+footer a + a {
+  margin-left: 16px;
+}
