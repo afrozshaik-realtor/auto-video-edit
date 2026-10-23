@@ -32,7 +32,8 @@ const LOCAL_IDS_KEY = 'reel-studio.ids';
 export function getIds(): AppIds | null {
   const c = appConfig;
   // The dev-only fake Google (?mock) has its own sheet, so skip the real IDs there.
-  const mock = import.meta.env.DEV && (window as { __reelStudioMock?: boolean }).__reelStudioMock;
+  // (import.meta.env is undefined when the automation job imports this under Node.)
+  const mock = import.meta.env?.DEV && (window as { __reelStudioMock?: boolean }).__reelStudioMock;
   if (!mock && c.sheetId && c.driveFolders.raw && c.driveFolders.working && c.driveFolders.completed) {
     return { sheetId: c.sheetId, driveFolders: { ...c.driveFolders } };
   }
@@ -143,6 +144,12 @@ export async function createReel(ids: AppIds, user: string, input: NewReelInput,
     postedUrl: '',
     postDate: '',
     notes: '',
+    aiStatus: '',
+    aiDetail: '',
+    aiUpdatedAt: '',
+    aiRuns: 0,
+    aiNotes: '',
+    caption: '',
   };
   await appendRecord(ids, 'Reels', null, reelToRecord(reel));
 
@@ -154,7 +161,13 @@ export async function createReel(ids: AppIds, user: string, input: NewReelInput,
   return reel;
 }
 
-export type ReelPatch = Partial<Pick<Reel, 'title' | 'tags' | 'stage' | 'assignee' | 'finalVideoLink' | 'postedUrl' | 'postDate' | 'notes'>>;
+export type ReelPatch = Partial<
+  Pick<
+    Reel,
+    | 'title' | 'tags' | 'stage' | 'assignee' | 'finalVideoLink' | 'postedUrl' | 'postDate' | 'notes'
+    | 'aiStatus' | 'aiDetail' | 'aiUpdatedAt' | 'aiRuns' | 'aiNotes' | 'caption'
+  >
+>;
 
 /** Update a reel's row. Re-reads the tab first so other people's edits to other reels are never overwritten. */
 export async function updateReel(ids: AppIds, reelId: string, patch: ReelPatch): Promise<Reel> {
@@ -178,6 +191,21 @@ export async function moveReel(ids: AppIds, user: string, reel: Reel, to: Stage,
 
 export async function completeReel(ids: AppIds, user: string, reel: Reel): Promise<Reel> {
   return moveReel(ids, user, reel, 'completed', { postDate: reel.postDate || localDate() });
+}
+
+/**
+ * Ask the AI editor to (re-)run on this reel. The GitHub Actions job picks
+ * queued reels up on its next check. Notes are added to the edit prompt.
+ */
+export async function queueAiEdit(ids: AppIds, user: string, reel: Reel, notes: string): Promise<Reel> {
+  const updated = await updateReel(ids, reel.id, {
+    aiStatus: 'queued',
+    aiNotes: notes.trim(),
+    aiDetail: 'Waiting for the AI editor to start',
+    aiUpdatedAt: new Date().toISOString(),
+  });
+  await logActivity(ids, user, reel.id, 'AI edit queued', notes.trim() ? 'with notes' : '');
+  return updated;
 }
 
 // ---------- Checklist ----------
@@ -215,7 +243,7 @@ export async function saveStep(
 
 /**
  * Tick or untick a step, applying automatic stage moves
- * (ticking Setup on a Raw reel moves its folder to Working).
+ * (see autoStageAfterStep).
  */
 export async function setStepDone(
   ids: AppIds,

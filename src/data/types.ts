@@ -1,5 +1,8 @@
 export type Stage = 'raw' | 'working' | 'completed';
 
+/** Where the automated AI edit is for a reel. Empty means it hasn't been picked up yet. */
+export type AiStatus = '' | 'queued' | 'running' | 'done' | 'failed';
+
 export interface Reel {
   id: string;
   title: string;
@@ -15,6 +18,16 @@ export interface Reel {
   postedUrl: string;
   postDate: string;
   notes: string;
+  aiStatus: AiStatus;
+  /** What the AI editor is doing now, or why it failed. */
+  aiDetail: string;
+  aiUpdatedAt: string;
+  /** How many AI edits have finished for this reel. */
+  aiRuns: number;
+  /** Notes for the next AI edit (a re-run). */
+  aiNotes: string;
+  /** Instagram caption and hashtags written by the AI. */
+  caption: string;
 }
 
 export interface ChecklistEntry {

@@ -3,14 +3,16 @@
 // Sheet without breaking the app. Any schema change must bump SCHEMA_VERSION
 // and ship a migration (src/data/migrations.ts, Phase 2).
 
-import type { ActivityEntry, Business, ChecklistEntry, Reel, Stage, Tag } from './types';
+import type { ActivityEntry, AiStatus, Business, ChecklistEntry, Reel, Stage, Tag } from './types';
 
-export const SCHEMA_VERSION = 1;
+// v2: Reels gained ai_status, ai_detail, ai_updated_at, ai_runs, ai_notes, caption.
+export const SCHEMA_VERSION = 2;
 
 export const TABS = {
   Reels: [
     'id', 'title', 'business', 'tags', 'stage', 'assignee', 'created_by', 'created_at',
     'updated_at', 'drive_folder_id', 'final_video_link', 'posted_url', 'post_date', 'notes',
+    'ai_status', 'ai_detail', 'ai_updated_at', 'ai_runs', 'ai_notes', 'caption',
   ],
   Checklist: ['reel_id', 'step_id', 'done', 'done_by', 'done_at', 'note'],
   Businesses: ['id', 'name', 'short_code', 'accent_color', 'style_rules_md', 'active'],
@@ -23,6 +25,7 @@ export type TabName = keyof typeof TABS;
 export type RowRecord = Record<string, string>;
 
 const STAGES: Stage[] = ['raw', 'working', 'completed'];
+const AI_STATUSES: AiStatus[] = ['', 'queued', 'running', 'done', 'failed'];
 
 function bool(v: string | undefined): boolean {
   return (v ?? '').trim().toUpperCase() === 'TRUE';
@@ -37,6 +40,7 @@ export function splitTags(v: string | undefined): string[] {
 
 export function reelFromRecord(r: RowRecord): Reel {
   const stage = (r.stage ?? '').trim().toLowerCase() as Stage;
+  const aiStatus = (r.ai_status ?? '').trim().toLowerCase() as AiStatus;
   return {
     id: r.id ?? '',
     title: r.title ?? '',
@@ -52,6 +56,12 @@ export function reelFromRecord(r: RowRecord): Reel {
     postedUrl: r.posted_url ?? '',
     postDate: r.post_date ?? '',
     notes: r.notes ?? '',
+    aiStatus: AI_STATUSES.includes(aiStatus) ? aiStatus : '',
+    aiDetail: r.ai_detail ?? '',
+    aiUpdatedAt: r.ai_updated_at ?? '',
+    aiRuns: Number(r.ai_runs) || 0,
+    aiNotes: r.ai_notes ?? '',
+    caption: r.caption ?? '',
   };
 }
 
@@ -71,6 +81,12 @@ export function reelToRecord(reel: Reel): RowRecord {
     posted_url: reel.postedUrl,
     post_date: reel.postDate,
     notes: reel.notes,
+    ai_status: reel.aiStatus,
+    ai_detail: reel.aiDetail,
+    ai_updated_at: reel.aiUpdatedAt,
+    ai_runs: reel.aiRuns ? String(reel.aiRuns) : '',
+    ai_notes: reel.aiNotes,
+    caption: reel.caption,
   };
 }
 

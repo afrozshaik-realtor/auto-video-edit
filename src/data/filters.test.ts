@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_FILTERS, activeFilterCount, filterReels } from './filters';
+import { makeReel } from './fixtures';
 import type { Reel } from './types';
 
-const base: Reel = {
-  id: '', title: '', business: '', tags: [], stage: 'raw', assignee: '', createdBy: '', createdAt: '',
-  updatedAt: '', driveFolderId: '', finalVideoLink: '', postedUrl: '', postDate: '', notes: '',
-};
+const base: Reel = makeReel({ id: '', business: '', stage: 'raw', driveFolderId: '', title: '' });
 const reels: Reel[] = [
   { ...base, id: 'a', title: 'First-time buyer mistakes', business: 'tce', tags: ['buyers', 'tips'], stage: 'raw', assignee: 'sam@x.com' },
   { ...base, id: 'b', title: 'Basement permits', business: 'amb', tags: ['permits'], stage: 'working', assignee: 'afroz@x.com' },
