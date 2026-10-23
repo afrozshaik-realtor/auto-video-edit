@@ -7,6 +7,7 @@ export function makeReel(over: Partial<Reel> = {}): Reel {
     id: 'r-1', title: 'Test', business: 'tce', tags: [], stage: 'working', assignee: '',
     createdBy: '', createdAt: '', updatedAt: '', driveFolderId: 'f', finalVideoLink: '',
     postedUrl: '', postDate: '', notes: '', aiStatus: '', aiDetail: '', aiUpdatedAt: '',
-    aiRuns: 0, aiNotes: '', caption: '', ...over,
+    aiRuns: 0, aiNotes: '', caption: '', thumbnailLink: '', thumbStatus: '', thumbDetail: '',
+    thumbPrompt: '', thumbNotes: '', ...over,
   };
 }

@@ -150,6 +150,11 @@ export async function createReel(ids: AppIds, user: string, input: NewReelInput,
     aiRuns: 0,
     aiNotes: '',
     caption: '',
+    thumbnailLink: '',
+    thumbStatus: '',
+    thumbDetail: '',
+    thumbPrompt: '',
+    thumbNotes: '',
   };
   await appendRecord(ids, 'Reels', null, reelToRecord(reel));
 
@@ -166,6 +171,7 @@ export type ReelPatch = Partial<
     Reel,
     | 'title' | 'tags' | 'stage' | 'assignee' | 'finalVideoLink' | 'postedUrl' | 'postDate' | 'notes'
     | 'aiStatus' | 'aiDetail' | 'aiUpdatedAt' | 'aiRuns' | 'aiNotes' | 'caption'
+    | 'thumbnailLink' | 'thumbStatus' | 'thumbDetail' | 'thumbPrompt' | 'thumbNotes'
   >
 >;
 
@@ -205,6 +211,18 @@ export async function queueAiEdit(ids: AppIds, user: string, reel: Reel, notes: 
     aiUpdatedAt: new Date().toISOString(),
   });
   await logActivity(ids, user, reel.id, 'AI edit queued', notes.trim() ? 'with notes' : '');
+  return updated;
+}
+
+/** Ask the AI editor for a new thumbnail only (no re-edit). Notes change the image prompt. */
+export async function queueThumbnail(ids: AppIds, user: string, reel: Reel, notes: string): Promise<Reel> {
+  const updated = await updateReel(ids, reel.id, {
+    thumbStatus: 'queued',
+    thumbNotes: notes.trim(),
+    thumbDetail: 'Waiting for the AI editor to start',
+    aiUpdatedAt: new Date().toISOString(),
+  });
+  await logActivity(ids, user, reel.id, 'Thumbnail queued', notes.trim() ? 'with notes' : '');
   return updated;
 }
 

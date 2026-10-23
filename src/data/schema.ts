@@ -6,13 +6,15 @@
 import type { ActivityEntry, AiStatus, Business, ChecklistEntry, Reel, Stage, Tag } from './types';
 
 // v2: Reels gained ai_status, ai_detail, ai_updated_at, ai_runs, ai_notes, caption.
-export const SCHEMA_VERSION = 2;
+// v3: Reels gained thumbnail_link, thumb_status, thumb_detail, thumb_prompt, thumb_notes.
+export const SCHEMA_VERSION = 3;
 
 export const TABS = {
   Reels: [
     'id', 'title', 'business', 'tags', 'stage', 'assignee', 'created_by', 'created_at',
     'updated_at', 'drive_folder_id', 'final_video_link', 'posted_url', 'post_date', 'notes',
     'ai_status', 'ai_detail', 'ai_updated_at', 'ai_runs', 'ai_notes', 'caption',
+    'thumbnail_link', 'thumb_status', 'thumb_detail', 'thumb_prompt', 'thumb_notes',
   ],
   Checklist: ['reel_id', 'step_id', 'done', 'done_by', 'done_at', 'note'],
   Businesses: ['id', 'name', 'short_code', 'accent_color', 'style_rules_md', 'active'],
@@ -41,6 +43,7 @@ export function splitTags(v: string | undefined): string[] {
 export function reelFromRecord(r: RowRecord): Reel {
   const stage = (r.stage ?? '').trim().toLowerCase() as Stage;
   const aiStatus = (r.ai_status ?? '').trim().toLowerCase() as AiStatus;
+  const thumbStatus = (r.thumb_status ?? '').trim().toLowerCase() as AiStatus;
   return {
     id: r.id ?? '',
     title: r.title ?? '',
@@ -62,6 +65,11 @@ export function reelFromRecord(r: RowRecord): Reel {
     aiRuns: Number(r.ai_runs) || 0,
     aiNotes: r.ai_notes ?? '',
     caption: r.caption ?? '',
+    thumbnailLink: r.thumbnail_link ?? '',
+    thumbStatus: AI_STATUSES.includes(thumbStatus) ? thumbStatus : '',
+    thumbDetail: r.thumb_detail ?? '',
+    thumbPrompt: r.thumb_prompt ?? '',
+    thumbNotes: r.thumb_notes ?? '',
   };
 }
 
@@ -87,6 +95,11 @@ export function reelToRecord(reel: Reel): RowRecord {
     ai_runs: reel.aiRuns ? String(reel.aiRuns) : '',
     ai_notes: reel.aiNotes,
     caption: reel.caption,
+    thumbnail_link: reel.thumbnailLink,
+    thumb_status: reel.thumbStatus,
+    thumb_detail: reel.thumbDetail,
+    thumb_prompt: reel.thumbPrompt,
+    thumb_notes: reel.thumbNotes,
   };
 }
 

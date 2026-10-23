@@ -28,6 +28,14 @@ export interface Reel {
   aiNotes: string;
   /** Instagram caption and hashtags written by the AI. */
   caption: string;
+  /** Drive link to the latest AI thumbnail. */
+  thumbnailLink: string;
+  thumbStatus: AiStatus;
+  thumbDetail: string;
+  /** The image prompt Claude wrote for the latest thumbnail. */
+  thumbPrompt: string;
+  /** Notes for the next thumbnail (a redo). */
+  thumbNotes: string;
 }
 
 export interface ChecklistEntry {

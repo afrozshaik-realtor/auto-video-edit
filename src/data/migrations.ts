@@ -32,6 +32,10 @@ export const MIGRATIONS: Record<number, Migration> = {
     description: 'Add AI edit columns to Reels',
     run: (ids) => addMissingColumns(ids, 'Reels'),
   },
+  3: {
+    description: 'Add AI thumbnail columns to Reels',
+    run: (ids) => addMissingColumns(ids, 'Reels'),
+  },
 };
 
 async function setSchemaVersion(ids: AppIds, version: number) {
