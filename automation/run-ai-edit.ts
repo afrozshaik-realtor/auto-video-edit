@@ -65,9 +65,15 @@ async function ownerToken(): Promise<string> {
     }),
   });
   if (!res.ok) {
-    throw new Error(
-      `Google refused the AI editor's sign-in (${res.status}). Make a new refresh token with "npm run ai:google-token" and update the GOOGLE_REFRESH_TOKEN secret.`,
-    );
+    // Google's error code (invalid_grant, invalid_client, …) is safe to log; the description may not be.
+    const code = ((await res.json().catch(() => ({}))) as { error?: string }).error ?? 'unknown';
+    const hint =
+      code === 'invalid_client'
+        ? 'The GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET secrets don’t match a Desktop app client. Re-enter both from the same client.'
+        : code === 'invalid_grant'
+          ? 'The refresh token was made with a different client, was revoked, or expired (the app must be "In production"). Run "npm run ai:google-token" with the same Desktop client whose ID and secret are in GitHub, then update GOOGLE_REFRESH_TOKEN.'
+          : 'Check the three Google secrets.';
+    throw new Error(`Google refused the AI editor's sign-in (${res.status} ${code}). ${hint}`);
   }
   const data = (await res.json()) as { access_token: string; expires_in: number };
   cached = { token: data.access_token, expiresAt: Date.now() + data.expires_in * 1000 };
