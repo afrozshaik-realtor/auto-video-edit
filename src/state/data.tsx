@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { AppIds } from '../config/app.config';
+import { runMigrations } from '../data/migrations';
 import * as repo from '../data/repo';
+import { SCHEMA_VERSION } from '../data/schema';
 import type { ChecklistEntry, Reel, ReelChecklist } from '../data/types';
 import { useAuth } from './auth';
 import { useToast } from './toast';
@@ -18,11 +20,15 @@ interface DataState {
   updateReel: (reelId: string, patch: repo.ReelPatch) => Promise<void>;
   completeReel: (reel: Reel) => Promise<void>;
   moveReelBack: (reel: Reel, to: Reel['stage']) => Promise<void>;
+  /** Start (or re-run) the automated AI edit, with optional notes. */
+  queueAiEdit: (reel: Reel, notes: string) => Promise<void>;
 }
 
 const DataContext = createContext<DataState | null>(null);
 
 const REFRESH_ON_FOCUS_MS = 15_000;
+/** How often to re-read the sheet while an AI edit is queued or running. */
+const AI_POLL_MS = 60_000;
 
 export function DataProvider({ ids, children }: { ids: AppIds; children: ReactNode }) {
   const { session, expired } = useAuth();
@@ -34,11 +40,22 @@ export function DataProvider({ ids, children }: { ids: AppIds; children: ReactNo
   // While a write is in flight, background refreshes are ignored so they can't undo optimistic updates.
   const inFlight = useRef(0);
   const lastLoad = useRef(0);
+  const migrating = useRef(false);
 
   const refresh = useCallback(async () => {
     lastLoad.current = Date.now();
     try {
-      const fresh = await repo.loadAll(ids);
+      let fresh = await repo.loadAll(ids);
+      if (fresh.schemaVersion < SCHEMA_VERSION && !migrating.current) {
+        // First person with edit access to load the new version upgrades the sheet.
+        migrating.current = true;
+        try {
+          await runMigrations(ids, fresh.schemaVersion);
+          fresh = await repo.loadAll(ids);
+        } catch (e) {
+          console.warn('Sheet migration failed', e);
+        }
+      }
       if (inFlight.current === 0) setData(fresh);
       setLoadError(null);
     } catch (e) {
@@ -65,6 +82,16 @@ export function DataProvider({ ids, children }: { ids: AppIds; children: ReactNo
       window.removeEventListener('focus', onVisible);
     };
   }, [refresh]);
+
+  // Keep AI progress fresh without anyone reloading.
+  const aiActive = data?.reels.some((r) => r.aiStatus === 'queued' || r.aiStatus === 'running') ?? false;
+  useEffect(() => {
+    if (!aiActive || expired) return;
+    const t = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refresh();
+    }, AI_POLL_MS);
+    return () => window.clearInterval(t);
+  }, [aiActive, expired, refresh]);
 
   const patchReelLocal = useCallback((reel: Reel) => {
     setData((d) => (d ? { ...d, reels: d.reels.map((r) => (r.id === reel.id ? reel : r)) } : d));
@@ -160,6 +187,13 @@ export function DataProvider({ ids, children }: { ids: AppIds; children: ReactNo
         run(null, async () => {
           patchReelLocal(await repo.moveReel(ids, user, reel, to));
         }),
+      queueAiEdit: (reel, notes) =>
+        run(
+          () => patchReelLocal({ ...reel, aiStatus: 'queued', aiNotes: notes, aiDetail: 'Waiting for the AI editor to start' }),
+          async () => {
+            patchReelLocal(await repo.queueAiEdit(ids, user, reel, notes));
+          },
+        ),
     }),
     [ids, data, loading, loadError, user, refresh, run, patchEntryLocal, patchReelLocal],
   );

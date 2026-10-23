@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { workflow } from '../config/workflow';
 import { requiredProgress } from '../data/stage';
 import type { Business, Reel, ReelChecklist } from '../data/types';
+import { aiStatusLine } from './AiPanels';
 
 export function shortName(email: string): string {
   return email.split('@')[0] || email;
@@ -11,6 +12,7 @@ export function shortName(email: string): string {
 export function ClipCard({ reel, business, checklist }: { reel: Reel; business?: Business; checklist?: ReelChecklist }) {
   const { done, total } = requiredProgress(workflow, checklist);
   const pct = total ? Math.round((done / total) * 100) : 0;
+  const ai = aiStatusLine(reel);
   return (
     <Link
       to={`/reel/${encodeURIComponent(reel.id)}`}
@@ -35,6 +37,7 @@ export function ClipCard({ reel, business, checklist }: { reel: Reel; business?:
           {reel.tags.length > 3 && <span className="tag tag-more">+{reel.tags.length - 3}</span>}
         </span>
       )}
+      {ai && <span className={`clip-ai${reel.aiStatus === 'failed' ? ' is-failed' : ''}`}>{ai}</span>}
       <span className="clip-foot">
         <span className="clip-assignee">{reel.assignee ? shortName(reel.assignee) : 'Unassigned'}</span>
       </span>

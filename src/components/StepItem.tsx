@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, type ReactNode } from 'react';
 import { getPrompt, renderPrompt, type PromptContext } from '../config/prompts';
 import { getTool } from '../config/tools';
 import type { WorkflowStep } from '../config/workflow';
@@ -24,6 +24,8 @@ interface Props {
   onSaveNote: (note: string) => Promise<void>;
   onSaveField: (field: 'finalVideoLink' | 'postedUrl', value: string) => Promise<void>;
   onBlocked: (message: string) => void;
+  /** AI status, caption or review content for steps with a `panel`. */
+  panel?: ReactNode;
 }
 
 const FIELD_LABELS = {
@@ -47,7 +49,9 @@ export function StepItem(p: Props) {
   }
 
   const blockPrompts = (step.prompts ?? []).map(getPrompt).filter((x) => x && x.kind === 'block');
-  const chipPrompts = (step.prompts ?? []).map(getPrompt).filter((x) => x && x.kind === 'chip');
+  // The review panel shows director notes itself, as notes for a re-run.
+  const chipPrompts =
+    step.panel === 'review' ? [] : (step.prompts ?? []).map(getPrompt).filter((x) => x && x.kind === 'chip');
 
   return (
     <li id={`step-${step.id}`} className={`step${open ? ' is-open' : ''}${done ? ' is-done' : ''}`}>
@@ -56,15 +60,20 @@ export function StepItem(p: Props) {
           type="checkbox"
           className="step-check"
           checked={done}
+          disabled={step.auto}
           onChange={(e) => toggleDone(e.target.checked)}
-          aria-label={`${step.title}: ${done ? 'done' : 'not done'}`}
+          aria-label={`${step.title}: ${done ? 'done' : 'not done'}${step.auto ? ', ticked automatically' : ''}`}
         />
         <button type="button" className="step-toggle" aria-expanded={open} aria-controls={bodyId} onClick={p.onToggleOpen}>
           <span className="step-num">{num}</span>
           <span className="step-title">{step.title}</span>
           <span className="step-meta">
             {!step.required && <span className="pill">Optional</span>}
-            <span className={`pill pill-who who-${step.who.toLowerCase()}`}>{step.who}</span>
+            {step.auto ? (
+              <span className="pill pill-auto">Automatic</span>
+            ) : (
+              <span className={`pill pill-who who-${step.who.toLowerCase()}`}>{step.who}</span>
+            )}
           </span>
           <Icon name="chevron" size={16} />
         </button>
@@ -76,6 +85,8 @@ export function StepItem(p: Props) {
           <p className="done-when">
             <span>Done when</span> {step.doneWhen}
           </p>
+
+          {p.panel}
 
           {blockPrompts.map((prompt) => {
             const text = renderPrompt(prompt!, p.promptContext);
@@ -154,7 +165,7 @@ export function StepItem(p: Props) {
           <SaveOnBlurField label="Note for this step" multiline value={entry?.note ?? ''} onSave={p.onSaveNote} />
 
           <div className="step-actions">
-            {!done ? (
+            {!done && !step.auto ? (
               <button
                 type="button"
                 className="btn btn-primary"

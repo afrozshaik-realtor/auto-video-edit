@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { workflow } from '../config/workflow';
 import { prompts } from '../config/prompts';
 import { tools } from '../config/tools';
+import { makeReel as reel } from './fixtures';
 import {
   autoStageAfterStep,
   completionBlockers,
@@ -10,15 +11,7 @@ import {
   requiredProgress,
   stepTickBlocker,
 } from './stage';
-import type { ChecklistEntry, Reel, ReelChecklist } from './types';
-
-function reel(over: Partial<Reel> = {}): Reel {
-  return {
-    id: 'r-1', title: 'Test', business: 'tce', tags: [], stage: 'working', assignee: '',
-    createdBy: '', createdAt: '', updatedAt: '', driveFolderId: 'f', finalVideoLink: '',
-    postedUrl: '', postDate: '', notes: '', ...over,
-  };
-}
+import type { ChecklistEntry, ReelChecklist } from './types';
 
 function checklist(doneIds: string[]): ReelChecklist {
   const m: ReelChecklist = new Map();
@@ -30,24 +23,16 @@ function checklist(doneIds: string[]): ReelChecklist {
 }
 
 const requiredIds = workflow.steps.filter((s) => s.required).map((s) => s.id);
+const step = (id: string) => workflow.steps.find((s) => s.id === id)!;
 
 describe('workflow config', () => {
-  it('has 17 steps with unique ids, 16 required', () => {
-    expect(workflow.steps).toHaveLength(17);
-    expect(new Set(workflow.steps.map((s) => s.id)).size).toBe(17);
-    expect(requiredIds).toHaveLength(16);
-    expect(workflow.steps.find((s) => !s.required)?.id).toBe('polish');
-  });
-
-  it('puts the required B-roll steps between Pass 02 and Pass 03', () => {
-    const ids = workflow.steps.map((s) => s.id);
-    expect(ids.slice(ids.indexOf('pass-02'), ids.indexOf('pass-03') + 1)).toEqual([
-      'pass-02',
-      'broll-plan',
-      'broll-mix',
-      'pass-03',
+  it('has 7 steps in order, 6 required, with the AI steps automatic', () => {
+    expect(workflow.steps.map((s) => s.id)).toEqual([
+      'shoot', 'upload', 'ai-edit', 'ai-caption', 'polish', 'phone-check', 'post',
     ]);
-    expect(requiredIds).toEqual(expect.arrayContaining(['broll-plan', 'broll-mix']));
+    expect(requiredIds).toHaveLength(6);
+    expect(workflow.steps.filter((s) => !s.required).map((s) => s.id)).toEqual(['polish']);
+    expect(workflow.steps.filter((s) => s.auto).map((s) => s.id)).toEqual(['ai-edit', 'ai-caption']);
   });
 
   it('only references prompts and tools that exist', () => {
@@ -59,41 +44,43 @@ describe('workflow config', () => {
     }
     expect(workflow.steps.map((s) => s.id)).toContain(workflow.startsEditingStepId);
   });
+
+  it('gives no step a prompt to copy by hand', () => {
+    for (const s of workflow.steps) {
+      const blocks = (s.prompts ?? []).filter((id) => prompts.find((p) => p.id === id)?.kind === 'block');
+      expect(blocks, s.id).toEqual([]);
+    }
+  });
 });
 
 describe('requiredProgress', () => {
   it('counts only required steps', () => {
-    expect(requiredProgress(workflow, checklist(['shoot', 'polish']))).toMatchObject({ done: 1, total: 16 });
-    expect(requiredProgress(workflow, undefined)).toMatchObject({ done: 0, total: 16 });
+    expect(requiredProgress(workflow, checklist(['shoot', 'polish']))).toMatchObject({ done: 1, total: 6 });
+    expect(requiredProgress(workflow, undefined)).toMatchObject({ done: 0, total: 6 });
     expect(requiredProgress(workflow, checklist(requiredIds)).missing).toEqual([]);
   });
 
-  it('ignores unticked entries', () => {
-    const c = checklist(['shoot']);
+  it('ignores unticked entries and steps no longer in the workflow', () => {
+    const c = checklist(['shoot', 'setup', 'pass-01']);
     c.set('shoot', { ...c.get('shoot')!, done: false });
     expect(requiredProgress(workflow, c).done).toBe(0);
   });
 });
 
 describe('autoStageAfterStep', () => {
-  it('moves Raw to Working when setup is ticked', () => {
-    expect(autoStageAfterStep(workflow, 'raw', 'setup', true)).toBe('working');
+  it('moves Raw to Working when the AI edit step is ticked', () => {
+    expect(autoStageAfterStep(workflow, 'raw', 'ai-edit', true)).toBe('working');
   });
   it('does nothing for other steps, unticks, or later stages', () => {
     expect(autoStageAfterStep(workflow, 'raw', 'shoot', true)).toBeNull();
-    expect(autoStageAfterStep(workflow, 'raw', 'setup', false)).toBeNull();
-    expect(autoStageAfterStep(workflow, 'working', 'setup', true)).toBeNull();
-    expect(autoStageAfterStep(workflow, 'completed', 'setup', true)).toBeNull();
+    expect(autoStageAfterStep(workflow, 'raw', 'ai-edit', false)).toBeNull();
+    expect(autoStageAfterStep(workflow, 'working', 'ai-edit', true)).toBeNull();
   });
 });
 
 describe('completionBlockers', () => {
   it('allows completion when all required steps are done and the URL is set', () => {
     expect(completionBlockers(workflow, reel({ postedUrl: 'https://instagram.com/reel/x' }), checklist(requiredIds))).toEqual([]);
-  });
-  it('does not need the optional step', () => {
-    const done = requiredIds.filter((id) => id !== 'polish');
-    expect(completionBlockers(workflow, reel({ postedUrl: 'u' }), checklist(done))).toEqual([]);
   });
   it('requires the posted URL', () => {
     expect(completionBlockers(workflow, reel(), checklist(requiredIds))).toEqual(['Paste the posted URL.']);
@@ -111,11 +98,14 @@ describe('completionBlockers', () => {
 });
 
 describe('stepTickBlocker', () => {
-  const post = workflow.steps.find((s) => s.id === 'post')!;
   it('needs a posted URL before the post step can be ticked', () => {
-    expect(stepTickBlocker(post, reel())).toMatch(/posted URL/);
-    expect(stepTickBlocker(post, reel({ postedUrl: '  ' }))).toMatch(/posted URL/);
-    expect(stepTickBlocker(post, reel({ postedUrl: 'https://x' }))).toBeNull();
+    expect(stepTickBlocker(step('post'), reel())).toMatch(/posted URL/);
+    expect(stepTickBlocker(step('post'), reel({ postedUrl: 'https://x' }))).toBeNull();
+  });
+  it('never lets people tick the automatic steps', () => {
+    expect(stepTickBlocker(step('ai-edit'), reel())).toMatch(/AI editor/);
+    expect(stepTickBlocker(step('ai-caption'), reel())).toMatch(/AI editor/);
+    expect(stepTickBlocker(step('shoot'), reel())).toBeNull();
   });
 });
 
@@ -126,7 +116,7 @@ describe('previousStage / firstOpenStep', () => {
     expect(previousStage('raw')).toBeNull();
   });
   it('opens the first required step that is not done', () => {
-    expect(firstOpenStep(workflow, checklist(['shoot', 'trim']))?.id).toBe('upload');
+    expect(firstOpenStep(workflow, checklist(['shoot']))?.id).toBe('upload');
     expect(firstOpenStep(workflow, checklist(requiredIds))?.id).toBe('polish');
   });
 });

@@ -24,6 +24,7 @@ export function requiredProgress(workflow: Workflow, checklist: ReelChecklist | 
 
 /** Why a step can't be ticked yet, or null if it can. */
 export function stepTickBlocker(step: WorkflowStep, reel: Reel): string | null {
+  if (step.auto) return 'The AI editor ticks this step when it finishes.';
   if (step.requiresField === 'postedUrl' && !reel.postedUrl.trim()) {
     return 'Paste the posted URL first.';
   }
@@ -49,7 +50,7 @@ export function autoStageAfterStep(
 export function completionBlockers(workflow: Workflow, reel: Reel, checklist: ReelChecklist | undefined): string[] {
   const blockers: string[] = [];
   if (reel.stage === 'completed') return ['This reel is already complete.'];
-  if (reel.stage === 'raw') blockers.push('Start editing first: tick the setup step.');
+  if (reel.stage === 'raw') blockers.push('Upload the raw clip so the AI edit can start.');
   const { missing } = requiredProgress(workflow, checklist);
   if (missing.length === 1) blockers.push(`Finish “${missing[0].title}”.`);
   else if (missing.length > 1) blockers.push(`Finish ${missing.length} required steps.`);

@@ -1270,6 +1270,67 @@ select.input {
   gap: 12px;
 }
 
+/* AI editor status */
+.pill-auto {
+  border-color: transparent;
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+.ai-panel {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.ai-panel p {
+  margin: 0;
+}
+.ai-now {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.ai-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--playhead);
+  flex: none;
+  animation: ai-pulse 1.4s ease-in-out infinite;
+}
+@keyframes ai-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+.ai-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.ai-chip.is-failed,
+.clip-ai.is-failed {
+  color: var(--danger);
+}
+.clip-ai {
+  margin-top: auto;
+  font-size: 13px;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clip-ai + .clip-foot {
+  margin-top: 0;
+}
+
 .reel-side {
   position: sticky;
   top: calc(var(--topbar-h) + 16px);

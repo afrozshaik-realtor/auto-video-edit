@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { workflow } from '../config/workflow';
+import { AiEditPanel, aiStatusLine, CaptionPanel, ReviewPanel } from '../components/AiPanels';
 import { BusinessChip } from '../components/BusinessChip';
 import { shortName } from '../components/ClipCard';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -16,7 +17,7 @@ import { useToast } from '../state/toast';
 
 export function ReelScreen() {
   const { id = '' } = useParams();
-  const { data, loading, setStepDone, saveStepNote, updateReel, completeReel, moveReelBack } = useData();
+  const { data, loading, setStepDone, saveStepNote, updateReel, completeReel, moveReelBack, queueAiEdit } = useData();
   const { notify } = useToast();
   const reel = data?.reels.find((r) => r.id === id);
   const checklist = data?.checklists.get(id);
@@ -72,13 +73,10 @@ export function ReelScreen() {
   }
 
   function setDone(stepId: string, done: boolean) {
-    const willStart = done && stepId === workflow.startsEditingStepId && reel!.stage === 'raw';
-    setStepDone(reel!, stepId, done)
-      .then(() => {
-        if (willStart) notify(`Editing started. The folder moved to ${DRIVE_FOLDER_NAMES.working}.`);
-      })
-      .catch(() => {});
+    // Failures show as a toast from the data layer.
+    setStepDone(reel!, stepId, done).catch(() => {});
   }
+  const aiLine = aiStatusLine(reel);
 
   const stageFolder: Record<Stage, string> = {
     raw: DRIVE_FOLDER_NAMES.raw,
@@ -114,6 +112,12 @@ export function ReelScreen() {
           <span className="muted small">
             {reel.assignee ? `Assigned to ${shortName(reel.assignee)}` : 'Unassigned'}
           </span>
+          {aiLine && (
+            <span className={`ai-chip${reel.aiStatus === 'failed' ? ' is-failed' : ''}`}>
+              {reel.aiStatus === 'running' && <span className="ai-dot" aria-hidden="true" />}
+              {aiLine}
+            </span>
+          )}
         </div>
       </header>
 
@@ -153,6 +157,23 @@ export function ReelScreen() {
                     notify(msg, 'error');
                     setOpenStep(step.id);
                   }}
+                  panel={
+                    step.panel === 'ai-edit' ? (
+                      <AiEditPanel reel={reel} onQueue={(notes) => queueAiEdit(reel, notes)} />
+                    ) : step.panel === 'ai-caption' ? (
+                      <CaptionPanel reel={reel} />
+                    ) : step.panel === 'review' ? (
+                      <ReviewPanel
+                        reel={reel}
+                        step={step}
+                        promptContext={promptContext}
+                        onRerun={async (notes) => {
+                          await queueAiEdit(reel, notes);
+                          notify('Re-run queued. The AI editor picks it up within about 10 minutes.');
+                        }}
+                      />
+                    ) : undefined
+                  }
                 />
             ))}
           </ol>
