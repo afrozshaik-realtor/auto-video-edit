@@ -32,6 +32,8 @@ export function aiStatusLine(reel: Reel): string | null {
     }
     case 'failed':
       return 'AI edit failed';
+    case 'retrim':
+      return 'Needs a re-trim';
     default:
       if (reel.thumbStatus === 'queued' || reel.thumbStatus === 'running') return 'Making a new thumbnail';
       if (reel.thumbStatus === 'failed') return 'Thumbnail failed';
@@ -314,12 +316,34 @@ export function AiEditPanel({
         </>
       );
       break;
+    case 'retrim':
+      body = (
+        <>
+          <p className="ai-warning">
+            <strong>Needs a re-trim.</strong> Pass 01 found cuts that clip a word or land inside a word or breath, so the
+            AI edit stopped. The reel is back in Trimmed.
+          </p>
+          <ol className="retrim-list">
+            {reel.aiDetail
+              .split('\n')
+              .filter(Boolean)
+              .map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+          </ol>
+          <p className="muted small">
+            Fix these in your editor, export again to the reel’s trimmed folder, then mark Manual trim done. The AI edit
+            restarts by itself.
+          </p>
+        </>
+      );
+      break;
     default:
       body = (
         <>
           <p>
-            Waiting for the raw clip. Once it’s in the reel’s raw folder, the AI edit starts by itself within about{' '}
-            {AI_CHECK_EVERY}.
+            Waiting for your trimmed clip. Once it’s in the reel’s trimmed folder and Manual trim is marked done, the AI
+            edit starts by itself within about {AI_CHECK_EVERY}.
           </p>
           <EditorHealthNote lastCheck={lastCheck} />
           <button type="button" className="btn btn-secondary btn-small" onClick={queue} disabled={busy}>

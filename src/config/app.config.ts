@@ -3,7 +3,7 @@
 // the owner has shared the Sheet and folder with.
 // Never put API keys or client secrets in this file.
 
-export const APP_VERSION = '0.4.2';
+export const APP_VERSION = '0.5.0';
 
 export const appConfig = {
   googleClientId: '56837720110-3j8qfag3t3onqclcbqj0qptld4kcd629.apps.googleusercontent.com',
@@ -13,12 +13,16 @@ export const appConfig = {
   driveFolders: {
     root: '1kbTXU4lRlWMu5WRFI3FjAaSYQ283kCn1', // Reels/
     raw: '19CIrfFY6QBw6bv1iNmmEANVfj2G0dcjo', // Reels/01 Raw Videos/
-    working: '1m3pIwe6gd7nw0_W3BVlrQg1mTjTyK01K', // Reels/02 Working Videos/
-    completed: '1p7h9CgmRBF_Gjeq4uvbBQ37DvBeI01mR', // Reels/03 Completed Videos/
+    // Reels/02 Trimmed Videos/ was added later: the schema 4 migration creates it and
+    // saves its ID in the sheet's Meta tab (trimmed_folder_id), so it can stay empty here.
+    trimmed: '',
+    working: '1m3pIwe6gd7nw0_W3BVlrQg1mTjTyK01K', // Reels/03 Working Videos/
+    completed: '1p7h9CgmRBF_Gjeq4uvbBQ37DvBeI01mR', // Reels/04 Completed Videos/
   },
 };
 
 export type AppIds = {
   sheetId: string;
-  driveFolders: { root: string; raw: string; working: string; completed: string };
+  /** `trimmed` may be empty: then it comes from Meta.trimmed_folder_id (see repo.withMetaIds). */
+  driveFolders: { root: string; raw: string; trimmed: string; working: string; completed: string };
 };

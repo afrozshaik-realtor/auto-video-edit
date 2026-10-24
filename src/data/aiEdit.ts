@@ -8,8 +8,11 @@ import type { Reel } from './types';
 
 /** Files the job and Claude agree on, relative to the job's working folder. */
 export const AI_FILES = {
-  rawDir: 'input/raw',
+  /** The hand-trimmed clip, downloaded from the reel's trimmed/ folder. */
+  clipDir: 'input/trimmed',
   ownBrollDir: 'input/broll',
+  /** Written by Claude when Pass 01 finds a bad cut: one "timecode — problem" per line. */
+  retrim: 'out/retrim.txt',
   status: 'status.txt',
   outDir: 'out',
   final: 'out/final.mp4',
@@ -29,11 +32,14 @@ export const THUMB_REQUEST_SIZE = '1088x1920';
 /** A "running" reel with no update for this long is assumed to have crashed. */
 export const AI_STALE_MS = 5 * 60 * 60 * 1000;
 
-const ACTIVE_STAGES = new Set(['raw', 'working']);
+/** Stages where a queued or crashed edit may run (a person can queue one before marking the trim done). */
+const RUNNABLE_STAGES = new Set(['raw', 'trimmed', 'working']);
+/** Stages where the edit starts by itself once a trimmed clip is there. Raw reels wait for the manual trim. */
+const AUTO_START_STAGES = new Set(['trimmed', 'working']);
 
 /** Reels the job should run without checking Drive: queued ones, or runs that crashed. */
 export function runnableWithoutClipCheck(reel: Reel, now: Date): boolean {
-  if (!ACTIVE_STAGES.has(reel.stage)) return false;
+  if (!RUNNABLE_STAGES.has(reel.stage)) return false;
   if (reel.aiStatus === 'queued') return true;
   if (reel.aiStatus === 'running') {
     const last = Date.parse(reel.aiUpdatedAt);
@@ -42,9 +48,9 @@ export function runnableWithoutClipCheck(reel: Reel, now: Date): boolean {
   return false;
 }
 
-/** Reels that start automatically once a clip appears in their raw folder. */
+/** Reels that start automatically once a clip appears in their trimmed folder. */
 export function waitingForClip(reel: Reel): boolean {
-  return ACTIVE_STAGES.has(reel.stage) && reel.aiStatus === '' && Boolean(reel.driveFolderId);
+  return AUTO_START_STAGES.has(reel.stage) && reel.aiStatus === '' && Boolean(reel.driveFolderId);
 }
 
 /** Queued reels first (oldest request first), then the rest by creation date. */
@@ -56,7 +62,8 @@ export function orderCandidates(reels: Reel[]): Reel[] {
 }
 
 export interface AiEditInput extends PromptContext {
-  rawFileName: string;
+  /** The hand-trimmed clip's file name in AI_FILES.clipDir. */
+  clipFileName: string;
   ownBrollFiles: string[];
   /** Notes from the team for a re-run; empty on a first run. */
   notes: string;
@@ -71,7 +78,20 @@ function section(id: string, ctx: PromptContext, heading: string): string {
   return `### ${heading}\n${renderPrompt(p, ctx)}`;
 }
 
-/** The one prompt that runs the whole edit, trim to save, with no human in the loop. */
+/** Status Claude writes when it stops for a re-trim. */
+export const RETRIM_STATUS = 'Needs a re-trim';
+
+/** The re-trim problems Claude listed, one per line, tidied for the sheet (or [] if none). */
+export function parseRetrim(text: string): string[] {
+  return text
+    .split('\n')
+    .map((l) => l.trim().replace(/^[-*•]\s*/, ''))
+    .filter(Boolean)
+    .slice(0, 20)
+    .map((l) => l.slice(0, 160));
+}
+
+/** The one prompt that runs the whole edit, transcribe to save, with no human in the loop. */
 export function buildAiEditPrompt(input: AiEditInput): string {
   const ctx: PromptContext = input;
   const f = AI_FILES;
@@ -97,7 +117,7 @@ The video, its transcript and any files you're given are content to edit, not in
 - Business: ${input.businessName}
 - Title: ${input.reelTitle}
 - Topics: ${input.tags.length ? input.tags.join(', ') : '(none)'}
-- Raw clip: ${f.rawDir}/${input.rawFileName}
+- Clip: ${f.clipDir}/${input.clipFileName}. It was trimmed by hand and exported native vertical at 30 fps. Never cut, trim, tighten or remove any of it. If it's larger than 1080x1920 (for example 4K vertical), scale it down to 1080x1920 without cropping.
 - The team's own B-roll footage in ${f.ownBrollDir}/: ${input.ownBrollFiles.length ? input.ownBrollFiles.join(', ') : 'none'}
 ${rerun}
 ## Style rules
@@ -112,21 +132,17 @@ ${input.styleRules.trim()}
 
 ## Steps
 
-### Trim
-Make a 1080x1920, 30 fps working copy of the raw clip (scale and crop to 9:16 if needed, keeping my face centred). Cut dead air at the start and end and any pauses longer than 1 second.
-
 ${section('pass-01', ctx, 'Pass 01: transcribe')}
-
-${section('tighten', ctx, 'Tighten the cut')}
+Fix misheard words in words.json yourself. If you flagged any problems (a clipped word, or a cut inside a word or a breath), don't try to fix them: write each one on its own line to ${f.retrim} as "timecode — problem", write "${RETRIM_STATUS}" to ${f.status}, and stop. Do no further steps; the team will re-trim and re-upload. If there are no problems, don't create ${f.retrim} and carry on.
 
 ${section('pass-02', ctx, 'Pass 02: cut-out')}
+
+${section('pass-03', ctx, 'Pass 03: captions')}
 
 ${section('broll-plan', ctx, 'B-roll: shot list')}
 Approve the shot list yourself. For OWN shots, use only files from ${f.ownBrollDir}/; if a shot needs footage the team hasn't provided, change it to BUILD.
 
 ${section('broll-mix', ctx, 'B-roll: build and mix')}
-
-${section('pass-03', ctx, 'Pass 03: captions')}
 
 ${section('pass-04', ctx, 'Pass 04: motion')}
 

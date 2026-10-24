@@ -32,11 +32,17 @@ const REFRESH_ON_FOCUS_MS = 15_000;
 /** How often to re-read the sheet while an AI edit is queued or running. */
 const AI_POLL_MS = 60_000;
 
-export function DataProvider({ ids, children }: { ids: AppIds; children: ReactNode }) {
+export function DataProvider({ ids: baseIds, children }: { ids: AppIds; children: ReactNode }) {
   const { session, expired } = useAuth();
   const { fail } = useToast();
   const user = session?.email ?? '';
   const [data, setData] = useState<repo.AppData | null>(null);
+  // Folder IDs that live in the sheet's Meta tab (the Trimmed folder) are filled in once loaded.
+  const trimmedFromMeta = data?.meta[repo.TRIMMED_FOLDER_KEY] ?? '';
+  const ids = useMemo(
+    () => repo.withMetaIds(baseIds, { [repo.TRIMMED_FOLDER_KEY]: trimmedFromMeta }),
+    [baseIds, trimmedFromMeta],
+  );
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   // While a write is in flight, background refreshes are ignored so they can't undo optimistic updates.
@@ -47,13 +53,13 @@ export function DataProvider({ ids, children }: { ids: AppIds; children: ReactNo
   const refresh = useCallback(async () => {
     lastLoad.current = Date.now();
     try {
-      let fresh = await repo.loadAll(ids);
+      let fresh = await repo.loadAll(baseIds);
       if (fresh.schemaVersion < SCHEMA_VERSION && !migrating.current) {
         // First person with edit access to load the new version upgrades the sheet.
         migrating.current = true;
         try {
-          await runMigrations(ids, fresh.schemaVersion);
-          fresh = await repo.loadAll(ids);
+          await runMigrations(baseIds, fresh.schemaVersion);
+          fresh = await repo.loadAll(baseIds);
         } catch (e) {
           console.warn('Sheet migration failed', e);
         }
@@ -65,7 +71,7 @@ export function DataProvider({ ids, children }: { ids: AppIds; children: ReactNo
     } finally {
       setLoading(false);
     }
-  }, [ids]);
+  }, [baseIds]);
 
   useEffect(() => {
     if (!expired) void refresh();

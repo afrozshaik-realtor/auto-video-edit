@@ -9,6 +9,7 @@ import {
   firstOpenStep,
   previousStage,
   requiredProgress,
+  STAGES,
   stepTickBlocker,
 } from './stage';
 import type { ChecklistEntry, ReelChecklist } from './types';
@@ -26,11 +27,11 @@ const requiredIds = workflow.steps.filter((s) => s.required).map((s) => s.id);
 const step = (id: string) => workflow.steps.find((s) => s.id === id)!;
 
 describe('workflow config', () => {
-  it('has 8 steps in order, 7 required, with the AI steps automatic', () => {
+  it('has 9 steps in order, 8 required, with the AI steps automatic', () => {
     expect(workflow.steps.map((s) => s.id)).toEqual([
-      'shoot', 'upload', 'ai-edit', 'ai-caption', 'ai-thumbnail', 'polish', 'phone-check', 'post',
+      'shoot', 'upload', 'manual-trim', 'ai-edit', 'ai-caption', 'ai-thumbnail', 'polish', 'phone-check', 'post',
     ]);
-    expect(requiredIds).toHaveLength(7);
+    expect(requiredIds).toHaveLength(8);
     expect(workflow.steps.filter((s) => !s.required).map((s) => s.id)).toEqual(['polish']);
     expect(workflow.steps.filter((s) => s.auto).map((s) => s.id)).toEqual(['ai-edit', 'ai-caption', 'ai-thumbnail']);
   });
@@ -42,7 +43,21 @@ describe('workflow config', () => {
       for (const p of s.prompts ?? []) expect(promptIds, `${s.id} → ${p}`).toContain(p);
       for (const t of s.tools ?? []) expect(toolIds, `${s.id} → ${t}`).toContain(t);
     }
-    expect(workflow.steps.map((s) => s.id)).toContain(workflow.startsEditingStepId);
+    for (const m of workflow.stageMoves) expect(workflow.steps.map((s) => s.id)).toContain(m.stepId);
+    expect(workflow.steps.map((s) => s.id)).toContain(workflow.retrimStepId);
+  });
+
+  it('makes Manual trim a person’s step with the trim and export checklists, CapCut and a file name', () => {
+    const trim = step('manual-trim');
+    expect(trim).toMatchObject({ who: 'You', required: true });
+    expect(trim.auto).toBeFalsy();
+    expect(trim.tools).toContain('capcut');
+    expect(trim.checklists?.map((c) => c.title)).toEqual(['Trim', 'Export settings']);
+    expect(trim.checklists?.[0].items).toHaveLength(4);
+    expect(trim.checklists?.[1].items).toHaveLength(3);
+    expect(trim.saveTo).toEqual({ folder: 'trimmed', fileName: '{{slug}}_trimmed.mp4' });
+    const ids = workflow.steps.map((s) => s.id);
+    expect(ids.indexOf('manual-trim')).toBeLessThan(ids.indexOf('ai-edit'));
   });
 
   it('gives no step a prompt to copy by hand', () => {
@@ -55,8 +70,8 @@ describe('workflow config', () => {
 
 describe('requiredProgress', () => {
   it('counts only required steps', () => {
-    expect(requiredProgress(workflow, checklist(['shoot', 'polish']))).toMatchObject({ done: 1, total: 7 });
-    expect(requiredProgress(workflow, undefined)).toMatchObject({ done: 0, total: 7 });
+    expect(requiredProgress(workflow, checklist(['shoot', 'polish']))).toMatchObject({ done: 1, total: 8 });
+    expect(requiredProgress(workflow, undefined)).toMatchObject({ done: 0, total: 8 });
     expect(requiredProgress(workflow, checklist(requiredIds)).missing).toEqual([]);
   });
 
@@ -68,8 +83,14 @@ describe('requiredProgress', () => {
 });
 
 describe('autoStageAfterStep', () => {
-  it('moves Raw to Working when the AI edit step is ticked', () => {
+  it('moves Raw to Trimmed when Manual trim is ticked', () => {
+    expect(autoStageAfterStep(workflow, 'raw', 'manual-trim', true)).toBe('trimmed');
+    expect(autoStageAfterStep(workflow, 'trimmed', 'manual-trim', true)).toBeNull();
+    expect(autoStageAfterStep(workflow, 'working', 'manual-trim', true)).toBeNull();
+  });
+  it('moves Raw or Trimmed to Working when the AI edit step is ticked', () => {
     expect(autoStageAfterStep(workflow, 'raw', 'ai-edit', true)).toBe('working');
+    expect(autoStageAfterStep(workflow, 'trimmed', 'ai-edit', true)).toBe('working');
   });
   it('does nothing for other steps, unticks, or later stages', () => {
     expect(autoStageAfterStep(workflow, 'raw', 'shoot', true)).toBeNull();
@@ -89,8 +110,9 @@ describe('completionBlockers', () => {
     const done = requiredIds.filter((id) => id !== 'phone-check');
     expect(completionBlockers(workflow, reel({ postedUrl: 'u' }), checklist(done))).toEqual(['Finish “Phone check”.']);
   });
-  it('blocks Raw and already completed reels', () => {
+  it('blocks Raw, Trimmed and already completed reels', () => {
     expect(completionBlockers(workflow, reel({ stage: 'raw', postedUrl: 'u' }), checklist(requiredIds))).toHaveLength(1);
+    expect(completionBlockers(workflow, reel({ stage: 'trimmed', postedUrl: 'u' }), checklist(requiredIds))).toHaveLength(1);
     expect(completionBlockers(workflow, reel({ stage: 'completed', postedUrl: 'u' }), checklist(requiredIds))).toEqual([
       'This reel is already complete.',
     ]);
@@ -111,8 +133,10 @@ describe('stepTickBlocker', () => {
 
 describe('previousStage / firstOpenStep', () => {
   it('moves back one stage', () => {
+    expect(STAGES).toEqual(['raw', 'trimmed', 'working', 'completed']);
     expect(previousStage('completed')).toBe('working');
-    expect(previousStage('working')).toBe('raw');
+    expect(previousStage('working')).toBe('trimmed');
+    expect(previousStage('trimmed')).toBe('raw');
     expect(previousStage('raw')).toBeNull();
   });
   it('opens the first required step that is not done', () => {

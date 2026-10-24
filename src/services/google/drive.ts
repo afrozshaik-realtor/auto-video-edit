@@ -99,6 +99,13 @@ export async function moveTo(id: string, newParentId: string): Promise<DriveFile
   );
 }
 
+export async function renameFile(id: string, name: string): Promise<DriveFile> {
+  return googleFetch<DriveFile>(`${API}/${encodeURIComponent(id)}${qs({ supportsAllDrives: true, fields: 'id,name' })}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  });
+}
+
 export function folderUrl(id: string): string {
   return `https://drive.google.com/drive/folders/${encodeURIComponent(id)}`;
 }

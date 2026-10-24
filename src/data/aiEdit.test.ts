@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { driveFileId } from '../components/AiPanels';
+import { AS_IS_LINE, prompts } from '../config/prompts';
 import {
   AI_FILES,
   AI_STALE_MS,
@@ -8,6 +9,8 @@ import {
   buildThumbnailRewritePrompt,
   cleanStatus,
   orderCandidates,
+  parseRetrim,
+  RETRIM_STATUS,
   runnableWithoutClipCheck,
   thumbnailQueued,
   waitingForClip,
@@ -34,9 +37,14 @@ describe('which reels the AI editor picks up', () => {
     expect(waitingForClip(makeReel({ aiStatus: 'failed' }))).toBe(false);
   });
 
-  it('waits for a clip on reels that have never been edited', () => {
-    expect(waitingForClip(makeReel({ stage: 'raw' }))).toBe(true);
-    expect(waitingForClip(makeReel({ stage: 'raw', driveFolderId: '' }))).toBe(false);
+  it('waits for a trimmed clip on Trimmed reels that have never been edited', () => {
+    expect(waitingForClip(makeReel({ stage: 'trimmed' }))).toBe(true);
+    expect(waitingForClip(makeReel({ stage: 'trimmed', driveFolderId: '' }))).toBe(false);
+    // Raw reels wait for the person to trim them, even if a clip is uploaded.
+    expect(waitingForClip(makeReel({ stage: 'raw' }))).toBe(false);
+    // A reel waiting for a re-trim is restarted by marking Manual trim done, not automatically.
+    expect(waitingForClip(makeReel({ stage: 'trimmed', aiStatus: 'retrim' }))).toBe(false);
+    expect(runnableWithoutClipCheck(makeReel({ stage: 'trimmed', aiStatus: 'retrim' }), now)).toBe(false);
     expect(waitingForClip(makeReel({ stage: 'completed' }))).toBe(false);
   });
 
@@ -51,13 +59,62 @@ describe('which reels the AI editor picks up', () => {
   });
 });
 
+describe('manual trim: the AI never cuts footage', () => {
+  const input = {
+    businessName: 'AM Builders', styleRules: '', reelTitle: 'T', tags: [], clipFileName: 't_trimmed.mp4',
+    ownBrollFiles: [], notes: '', runNumber: 1, hasStockApi: false,
+  };
+
+  it('has no trim or tighten step, and no prompt tells Claude to cut, trim or tighten', () => {
+    const p = buildAiEditPrompt(input);
+    expect(p).not.toMatch(/### Trim|Tighten the cut|dead air|filler/i);
+    expect(prompts.find((x) => x.id === 'tighten')).toBeUndefined();
+    for (const x of prompts) {
+      // The only cut/trim/tighten wording allowed is the instruction NOT to do it
+      // (or Pass 01 describing the problems to flag).
+      // ("cut-out" is the name of Pass 02, not an instruction to cut.)
+      const lines = x.text.split('\n').filter((l) => /\b(cut|cuts|trim|tighten)\b(?!-)/i.test(l));
+      for (const l of lines) expect(l, x.id).toMatch(/\b(do not|don.t|never)\b|clipped at a cut|cut that lands/i);
+    }
+  });
+
+  it('uses the new Pass 01 text exactly', () => {
+    const pass01 = prompts.find((x) => x.id === 'pass-01')!;
+    expect(pass01.text).toBe(
+      [
+        'Pass 01 — Transcribe.',
+        "I've uploaded a clip that I have ALREADY TRIMMED by hand. Do not cut, trim or tighten anything, and do not suggest cuts.",
+        "First confirm the clip's length, resolution and frame rate.",
+        'Then transcribe it with word-level timestamps, save them as words.json, and show me the transcript as a table (word, start, end) so I can fix misheard words.',
+        "Only flag problems I may have missed: a word that sounds clipped at a cut, or a cut that lands inside a word or a breath. Give me the timecode for each one and I'll fix it in my editor and re-upload.",
+      ].join('\n'),
+    );
+  });
+
+  it('starts every later pass with the as-is line', () => {
+    for (const id of ['pass-02', 'pass-03', 'broll-plan', 'broll-mix', 'pass-04', 'pass-05']) {
+      expect(prompts.find((x) => x.id === id)!.text.startsWith(AS_IS_LINE), id).toBe(true);
+    }
+    expect(AS_IS_LINE).toBe('Work on the manually trimmed clip as-is. Never re-trim or remove footage.');
+  });
+
+  it('stops for a re-trim instead of fixing bad cuts itself', () => {
+    const p = buildAiEditPrompt(input);
+    expect(p).toContain(AI_FILES.retrim);
+    expect(p).toContain(RETRIM_STATUS);
+    expect(p.indexOf(AI_FILES.retrim)).toBeLessThan(p.indexOf('\n### Pass 02'));
+    expect(parseRetrim('- 00:12.4 — clipped\n\n• 00:31.0 — breath\n')).toEqual(['00:12.4 — clipped', '00:31.0 — breath']);
+    expect(parseRetrim('\n  \n')).toEqual([]);
+  });
+});
+
 describe('the AI edit prompt', () => {
   const base = {
     businessName: 'AM Builders',
     styleRules: '# Reel Style Rules\n- Brand colors: #C2571A',
     reelTitle: 'Basement egress windows',
     tags: ['basements'],
-    rawFileName: 'take1.mp4',
+    clipFileName: 'take1_trimmed.mp4',
     ownBrollFiles: [],
     notes: '',
     runNumber: 1,
@@ -66,7 +123,7 @@ describe('the AI edit prompt', () => {
 
   it('runs every pass in order with no human in the loop', () => {
     const p = buildAiEditPrompt(base);
-    const order = ['Trim', 'Pass 01', 'Tighten the cut', 'Pass 02', 'B-roll: shot list', 'B-roll: build and mix', 'Pass 03', 'Pass 04', 'Pass 05', 'Director review', 'Caption and hashtags', 'Thumbnail', 'Save'].map((h) => `\n### ${h}`);
+    const order = ['Pass 01', 'Pass 02', 'Pass 03', 'B-roll: shot list', 'B-roll: build and mix', 'Pass 04', 'Pass 05', 'Director review', 'Caption and hashtags', 'Thumbnail', 'Save'].map((h) => `\n### ${h}`);
     const positions = order.map((h) => p.indexOf(h));
     expect(positions.every((x) => x >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
@@ -78,7 +135,7 @@ describe('the AI edit prompt', () => {
     const p = buildAiEditPrompt(base);
     expect(p).toContain('AM Builders');
     expect(p).toContain('Brand colors: #C2571A');
-    expect(p).toContain(`${AI_FILES.rawDir}/take1.mp4`);
+    expect(p).toContain(`${AI_FILES.clipDir}/take1_trimmed.mp4`);
     for (const f of [AI_FILES.final, AI_FILES.cover, AI_FILES.caption, AI_FILES.status]) expect(p).toContain(f);
   });
 
@@ -90,7 +147,7 @@ describe('the AI edit prompt', () => {
   it('puts re-run notes first and lists the team’s own footage', () => {
     const p = buildAiEditPrompt({ ...base, notes: '- Hook harder', runNumber: 2, ownBrollFiles: ['site.mp4'] });
     expect(p).toContain('edit number 2');
-    expect(p.indexOf('- Hook harder')).toBeLessThan(p.indexOf('### Trim'));
+    expect(p.indexOf('- Hook harder')).toBeLessThan(p.indexOf('\n### Pass 01'));
     expect(p).toContain('site.mp4');
     expect(buildAiEditPrompt(base)).not.toContain('Changes the team asked for');
   });
@@ -107,7 +164,7 @@ describe('thumbnails', () => {
     styleRules: '- Brand colors: #2F5FD0',
     reelTitle: 'First-time buyer mistakes',
     tags: ['buyers'],
-    rawFileName: 'take1.mp4',
+    clipFileName: 'take1_trimmed.mp4',
     ownBrollFiles: [],
     notes: '',
     runNumber: 1,

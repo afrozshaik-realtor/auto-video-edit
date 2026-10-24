@@ -45,6 +45,15 @@ export function getIds(): AppIds | null {
   }
 }
 
+/** Meta key holding the Trimmed Videos folder ID (created by the schema 4 migration). */
+export const TRIMMED_FOLDER_KEY = 'trimmed_folder_id';
+
+/** IDs with any folder that isn't in app.config.ts filled in from the sheet's Meta tab. */
+export function withMetaIds(ids: AppIds, meta: Record<string, string>): AppIds {
+  if (ids.driveFolders.trimmed || !meta[TRIMMED_FOLDER_KEY]) return ids;
+  return { ...ids, driveFolders: { ...ids.driveFolders, trimmed: meta[TRIMMED_FOLDER_KEY] } };
+}
+
 export function idsFromConfig(): boolean {
   return Boolean(appConfig.sheetId);
 }
@@ -199,7 +208,9 @@ export async function updateReel(ids: AppIds, reelId: string, patch: ReelPatch):
 /** Move the reel's Drive folder to the stage's folder, then record the new stage. */
 export async function moveReel(ids: AppIds, user: string, reel: Reel, to: Stage, extra: ReelPatch = {}): Promise<Reel> {
   if (!reel.driveFolderId) throw new Error('This reel has no Drive folder id in the sheet.');
-  await drive.moveTo(reel.driveFolderId, ids.driveFolders[to]);
+  const target = ids.driveFolders[to];
+  if (!target) throw new Error(`The ${to} folder isn’t set up yet. Reload Reel Studio so it can create it, then try again.`);
+  await drive.moveTo(reel.driveFolderId, target);
   const updated = await updateReel(ids, reel.id, { ...extra, stage: to });
   await logActivity(ids, user, reel.id, 'moved', `${reel.stage} → ${to}`);
   return updated;
@@ -283,6 +294,10 @@ export async function setStepDone(
   const entry = await saveStep(ids, reel.id, stepId, { done }, user);
   await logActivity(ids, user, reel.id, done ? 'step done' : 'step undone', stepId);
   const to = autoStageAfterStep(workflow, reel.stage, stepId, done);
-  const updated = to ? await moveReel(ids, user, reel, to) : reel;
+  let updated = to ? await moveReel(ids, user, reel, to) : reel;
+  // The AI edit stopped for a re-trim: marking the trim done again restarts it.
+  if (done && stepId === workflow.retrimStepId && reel.aiStatus === 'retrim') {
+    updated = await queueAiEdit(ids, user, updated, reel.aiNotes);
+  }
   return { entry, reel: updated };
 }

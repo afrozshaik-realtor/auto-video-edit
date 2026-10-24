@@ -16,8 +16,9 @@ shipped, and [docs/ROADMAP.md](docs/ROADMAP.md) for what's next.
 ## Set up the AI editor
 
 The AI edit runs in GitHub Actions ([.github/workflows/ai-edit.yml](.github/workflows/ai-edit.yml)).
-Every 10 minutes it checks the Reel Tracker for reels with a new clip in `raw/`, or a
-re-run request, and edits them with Claude Code. Until the secrets below are added it
+Every 10 minutes it checks the Reel Tracker for Trimmed reels with a hand-trimmed clip
+in `trimmed/`, or a re-run request, and edits them with Claude Code. It never cuts
+footage: trimming is done by hand in the Manual trim step. Until the secrets below are added it
 skips quietly.
 
 1. **Let the job's Google sign-in last.** In Google Cloud Console → Google Auth
@@ -64,8 +65,9 @@ skips quietly.
    ```bash
    gh secret set PEXELS_API_KEY
    ```
-8. **Try it.** Upload a clip to a reel's `raw/` folder. Within about 10 minutes the AI
-   edit step shows "Downloading the clip", then each pass. To start a check straight
+8. **Try it.** Trim a clip by hand, export it to a reel's `trimmed/` folder and mark
+   Manual trim done. Within about 10 minutes the AI edit step shows "Downloading the
+   clip", then each pass. To start a check straight
    away, run:
    ```bash
    gh workflow run ai-edit.yml
@@ -94,7 +96,8 @@ in-memory fake of Drive and Sheets that only works on the dev server:
 | `http://localhost:5173/?mock&seed` | Seven demo reels across all three stages |
 | `...&user=sam` | Signed in as a second teammate (use another tab) |
 | `...&reset` | Wipes the fake Drive |
-| `...&seed&v1` | An old (schema 1) sheet, to test the migration |
+| `...&seed&v1` | An old (schema 1) sheet, to test the migrations |
+| `...&seed&v3` | A schema 3 sheet and Drive (no Trimmed stage), to test the Trimmed migration |
 
 ## Commands
 
@@ -111,7 +114,7 @@ in-memory fake of Drive and Sheets that only works on the dev server:
 | Path | What |
 |---|---|
 | `src/config/app.config.ts` | Client ID, Sheet ID, Drive folder IDs (none of these are secret) |
-| `src/config/workflow.ts` | The 8 checklist steps, as data |
+| `src/config/workflow.ts` | The 9 checklist steps and stage moves, as data |
 | `src/config/prompts.ts` | Prompts and director notes (kit prompts are drafts for now) |
 | `src/data/aiEdit.ts` | The AI edit prompt, the file contract, and which reel runs next |
 | `automation/` | The AI editor job and the refresh-token helper |

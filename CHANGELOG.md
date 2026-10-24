@@ -3,6 +3,46 @@
 All notable changes to Reel Studio. The version shown in the app comes from
 `APP_VERSION` in `src/config/app.config.ts`.
 
+## 0.5.0 — 2026-10-23
+
+### Added
+- **Manual trim step**, after Upload. A person trims the clip in CapCut or any editor,
+  working through two checklists:
+  - **Trim:** cut on silence or breaths, never inside a word; keep short pauses and
+    breaths; leave 0.3 s at the end; hard cuts only.
+  - **Export settings:** native vertical 1080x1920 at a constant 30 fps, with no
+    captions, music, zooms, filters or audio processing.
+
+  The step has Open CapCut and Drive buttons, and shows the export file name
+  (`<reel-slug>_trimmed.mp4`) with a copy button.
+- **Trimmed stage:** Raw → Trimmed → Working → Completed.
+  - Marking Manual trim done moves the reel's folder to the new `02 Trimmed Videos`
+    folder. The board has a Trimmed lane, and Trimmed shows in the stage filter and
+    badges.
+  - Each reel gets a `trimmed/` subfolder for the export.
+- **Needs a re-trim:** if Pass 01 hears a clipped word, or a cut inside a word or a
+  breath, the AI edit stops instead of carrying on.
+  - The reel goes back to Trimmed, with the timecodes listed.
+  - Fixing the cut, re-exporting and marking Manual trim done restarts the edit.
+
+### Changed
+- The AI edit works only on the hand-trimmed clip, as it is. The automatic Trim and
+  "Tighten the cut" steps are gone, and no prompt asks Claude to cut, trim or tighten.
+- New Pass 01 text: the clip is already trimmed. Pass 01 confirms the length,
+  resolution and frame rate, transcribes, and only flags bad cuts.
+- Passes 02, 03, both B-roll steps, 04 and 05 now start with "Work on the manually
+  trimmed clip as-is. Never re-trim or remove footage."
+- **New pass order:** Pass 01 → 02 → 03 Captions → B-roll (shot list, build and mix) →
+  04 Motion → 05 Sound. B-roll is placed around the captions.
+- The workflow is now version 5, with 9 steps, 8 of them required.
+
+### Migration (schema 4, runs once on first load)
+- Creates `02 Trimmed Videos` and saves its ID in the sheet's Meta tab.
+- Renames `02 Working Videos` → `03 Working Videos` and `03 Completed Videos` →
+  `04 Completed Videos`. Nothing is moved or deleted.
+- Adds a `trimmed/` folder to every reel that isn't completed.
+- Existing reels keep their stage.
+
 ## 0.4.2 — 2026-10-23
 
 ### Added

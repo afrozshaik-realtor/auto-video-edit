@@ -16,6 +16,7 @@ import { AI_EDITOR_NAME } from '../src/config/workflow';
 import {
   AI_FILES,
   buildAiEditPrompt,
+  parseRetrim,
   buildThumbnailRewritePrompt,
   cleanStatus,
   orderCandidates,
@@ -80,17 +81,27 @@ async function ownerToken(): Promise<string> {
   return cached.token;
 }
 
+// Folder IDs not in app.config.ts (the Trimmed folder) come from the sheet's Meta tab.
+let meta: Record<string, string> = {};
+
 function ids(): AppIds {
   if (!appConfig.sheetId) throw new Error('src/config/app.config.ts has no sheetId yet.');
-  return { sheetId: appConfig.sheetId, driveFolders: { ...appConfig.driveFolders } };
+  return repo.withMetaIds({ sheetId: appConfig.sheetId, driveFolders: { ...appConfig.driveFolders } }, meta);
+}
+
+async function loadData() {
+  const data = await repo.loadAll(ids());
+  meta = data.meta;
+  return data;
 }
 
 // ---------- Finding work ----------
 
-async function rawClip(reel: Reel): Promise<drive.DriveFile | undefined> {
-  const rawFolder = await drive.findChildFolder(reel.driveFolderId, 'raw');
-  if (!rawFolder) return undefined;
-  const videos = (await drive.listChildren(rawFolder.id)).filter((f) => f.mimeType?.startsWith('video/'));
+/** The newest video in the reel's trimmed/ folder: the hand-trimmed export. */
+async function trimmedClip(reel: Reel): Promise<drive.DriveFile | undefined> {
+  const folder = await drive.findChildFolder(reel.driveFolderId, 'trimmed');
+  if (!folder) return undefined;
+  const videos = (await drive.listChildren(folder.id)).filter((f) => f.mimeType?.startsWith('video/'));
   return videos.sort((a, b) => (b.createdTime ?? '').localeCompare(a.createdTime ?? ''))[0];
 }
 
@@ -99,16 +110,16 @@ type Work =
   | { kind: 'thumbnail'; reel: Reel };
 
 async function nextReel(skip: Set<string> = new Set()): Promise<Work | null> {
-  const data = await repo.loadAll(ids());
+  const data = await loadData();
   const now = new Date();
   // Thumbnail redos take a minute, so they go first.
   const thumb = data.reels.find((r) => !skip.has(r.id) && thumbnailQueued(r));
   if (thumb) return { kind: 'thumbnail', reel: thumb };
   for (const reel of orderCandidates(data.reels)) {
     if (skip.has(reel.id)) continue;
-    if (runnableWithoutClipCheck(reel, now)) return { kind: 'edit', reel, clip: await rawClip(reel) };
+    if (runnableWithoutClipCheck(reel, now)) return { kind: 'edit', reel, clip: await trimmedClip(reel) };
     if (waitingForClip(reel)) {
-      const clip = await rawClip(reel);
+      const clip = await trimmedClip(reel);
       if (clip) return { kind: 'edit', reel, clip };
     }
   }
@@ -181,7 +192,7 @@ async function redoThumbnail(reel: Reel) {
   await setStatus(reel, { thumbStatus: 'running', thumbDetail: 'Writing the thumbnail prompt' });
   await tick(reel, 'ai-thumbnail', false);
   const workdir = join(process.env.RUNNER_TEMP ?? '/tmp', `thumb-${reel.id}`);
-  const data = await repo.loadAll(ids());
+  const data = await loadData();
   const business = data.businesses.find((b) => b.id === reel.business);
 
   let prompt = reel.thumbPrompt;
@@ -355,32 +366,51 @@ async function uploadOutputs(reel: Reel, workdir: string, runNumber: number) {
   return final;
 }
 
+/**
+ * Pass 01 flagged clipped words or cuts inside a word or breath. Put the reel back in
+ * Trimmed, untick the manual trim, and list the timecodes. Marking the trim done again
+ * restarts the edit (repo.setStepDone).
+ */
+async function askForRetrim(reel: Reel, problems: string[]) {
+  let current = await setStatus(reel, { aiStatus: 'retrim', aiDetail: problems.join('\n') });
+  if (current.stage === 'working') current = await repo.moveReel(ids(), AI_EDITOR_NAME, current, 'trimmed');
+  await tick(current, 'manual-trim', false);
+  await repo.logActivity(ids(), AI_EDITOR_NAME, reel.id, 'Needs a re-trim', `${problems.length} problem(s)`);
+  log(`reel ${reel.id}: needs a re-trim`);
+}
+
 async function editReel(reel: Reel, clip: drive.DriveFile | undefined) {
   const runNumber = reel.aiRuns + 1;
   log(`reel ${reel.id}: starting edit ${runNumber}`);
 
   if (!clip) {
-    await setStatus(reel, { aiStatus: 'failed', aiDetail: 'There’s no video in the reel’s raw folder. Upload one, then try again.' });
+    await setStatus(reel, {
+      aiStatus: 'failed',
+      aiDetail: 'There’s no video in the reel’s trimmed folder. Export your trimmed clip there, then try again.',
+    });
     log(`reel ${reel.id}: no clip`);
     return;
   }
 
-  const data = await repo.loadAll(ids());
+  const data = await loadData();
   const business = data.businesses.find((b) => b.id === reel.business);
   const notes = reel.aiNotes;
 
   // Claim the reel, move it to Working and reset the AI steps.
   let current = await setStatus(reel, { aiStatus: 'running', aiDetail: 'Downloading the clip' });
-  if (current.stage === 'raw') current = await repo.moveReel(ids(), AI_EDITOR_NAME, current, 'working');
+  if (current.stage === 'raw' || current.stage === 'trimmed') {
+    current = await repo.moveReel(ids(), AI_EDITOR_NAME, current, 'working');
+  }
   const checklist = data.checklists.get(reel.id);
-  if (!checklist?.get('upload')?.done) await tick(current, 'upload', true);
+  // A trimmed clip exists, so the upload and the manual trim are done.
+  for (const step of ['upload', 'manual-trim']) if (!checklist?.get(step)?.done) await tick(current, step, true);
   for (const step of ['ai-edit', 'ai-caption', 'ai-thumbnail', 'phone-check']) if (checklist?.get(step)?.done) await tick(current, step, false);
   current = await setStatus(current, { thumbStatus: '', thumbDetail: 'Made after the AI edit' });
   await repo.logActivity(ids(), AI_EDITOR_NAME, reel.id, 'AI edit started', `edit ${runNumber}`);
 
   const workdir = join(process.env.RUNNER_TEMP ?? '/tmp', `reel-${reel.id}`);
   mkdirSync(join(workdir, AI_FILES.projectDir), { recursive: true });
-  const rawFileName = await downloadTo(clip, join(workdir, AI_FILES.rawDir));
+  const clipFileName = await downloadTo(clip, join(workdir, AI_FILES.clipDir));
   const brollFolder = await drive.findChildFolder(reel.driveFolderId, 'broll');
   const ownBrollFiles: string[] = [];
   if (brollFolder) {
@@ -395,7 +425,7 @@ async function editReel(reel: Reel, clip: drive.DriveFile | undefined) {
     styleRules: business?.styleRulesMd ?? '',
     reelTitle: reel.title,
     tags: reel.tags,
-    rawFileName,
+    clipFileName,
     ownBrollFiles,
     notes,
     runNumber,
@@ -409,6 +439,15 @@ async function editReel(reel: Reel, clip: drive.DriveFile | undefined) {
     const retryNote =
       attempt === 1 ? '' : `\n\nA previous attempt stopped early (${problem}). Reuse what's useful from ${AI_FILES.projectDir}/ and finish the edit.`;
     const { code, result } = await runClaude(workdir, prompt + retryNote, current, logFile);
+
+    // Pass 01 found a bad cut in the hand trim: stop and hand it back for a re-trim.
+    const retrimPath = join(workdir, AI_FILES.retrim);
+    const retrim = existsSync(retrimPath) ? parseRetrim(readFileSync(retrimPath, 'utf8')) : [];
+    if (retrim.length) {
+      await askForRetrim(current, retrim);
+      return;
+    }
+
     problem = checkOutputs(workdir);
     if (problem && code !== 0) problem = result === 'error_max_turns' ? 'The AI editor ran out of turns.' : `The AI editor stopped with an error (code ${code}).`;
     log(`reel ${reel.id}: attempt ${attempt} ${problem ? 'failed' : 'finished'}`);
@@ -463,7 +502,7 @@ async function main() {
     return;
   }
 
-  const data = await repo.loadAll(ids());
+  const data = await loadData();
   if (data.schemaVersion < SCHEMA_VERSION) {
     log(`migrating sheet from schema ${data.schemaVersion} to ${SCHEMA_VERSION}`);
     await runMigrations(ids(), data.schemaVersion);

@@ -6,7 +6,7 @@ import { makeReel } from './fixtures';
 describe('AI edit progress', () => {
   it('uses the same stage names as the prompt headings Claude copies', () => {
     const prompt = buildAiEditPrompt({
-      businessName: 'B', styleRules: '', reelTitle: 'T', tags: [], rawFileName: 'a.mp4',
+      businessName: 'B', styleRules: '', reelTitle: 'T', tags: [], clipFileName: 'a.mp4',
       ownBrollFiles: [], notes: '', runNumber: 1, hasStockApi: false,
     });
     for (const label of CLAUDE_STAGE_LABELS) expect(prompt, label).toContain(`\n### ${label}\n`);
@@ -16,7 +16,6 @@ describe('AI edit progress', () => {
     AI_STAGES.forEach((s, i) => expect(progressFromDetail(s.label).stageIndex, s.label).toBe(i));
     expect(progressFromDetail('Downloading the clip').stageIndex).toBe(0);
     expect(progressFromDetail('Retrying the edit').stageIndex).toBe(0);
-    expect(progressFromDetail('Trimming dead air').stageIndex).toBe(1);
     expect(progressFromDetail('Saving to Drive').stageIndex).toBe(AI_STAGES.length - 1);
     expect(progressFromDetail('Pass 03: captions').stageIndex).not.toBe(progressFromDetail('Caption and hashtags').stageIndex);
   });
@@ -27,7 +26,7 @@ describe('AI edit progress', () => {
     const a = progressFromDetail('Pass 02: cut-out 10%').percent!;
     const b = progressFromDetail('Pass 02: cut-out 90%').percent!;
     expect(b).toBeGreaterThan(a);
-    expect(progressFromDetail('Pass 02: cut-out 90%')).toMatchObject({ stagePercent: 90, position: 'Step 5 of 14' });
+    expect(progressFromDetail('Pass 02: cut-out 90%')).toMatchObject({ stagePercent: 90, position: 'Step 3 of 12' });
     expect(progressFromDetail('Pass 05: sound').percent!).toBeLessThan(100);
   });
 
@@ -38,7 +37,7 @@ describe('AI edit progress', () => {
   it('is 0% while queued and 100% when done', () => {
     expect(reelProgress(makeReel({ aiStatus: 'queued' })).percent).toBe(0);
     expect(reelProgress(makeReel({ aiStatus: 'done' })).percent).toBe(100);
-    expect(reelProgress(makeReel({ aiStatus: 'running', aiDetail: 'Pass 01: transcribe' })).stageIndex).toBe(2);
+    expect(reelProgress(makeReel({ aiStatus: 'running', aiDetail: 'Pass 01: transcribe' })).stageIndex).toBe(1);
   });
 });
 

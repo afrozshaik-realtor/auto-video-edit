@@ -32,11 +32,19 @@ export const SEED_BUSINESSES: Business[] = [
 export const DRIVE_FOLDER_NAMES = {
   root: 'Reels',
   raw: '01 Raw Videos',
+  trimmed: '02 Trimmed Videos',
+  working: '03 Working Videos',
+  completed: '04 Completed Videos',
+} as const;
+
+/** Names the stage folders had before the Trimmed stage (schema 3 and earlier). */
+export const OLD_DRIVE_FOLDER_NAMES = {
   working: '02 Working Videos',
   completed: '03 Completed Videos',
 } as const;
 
-/** Subfolders created inside every reel folder. */
-export const REEL_SUBFOLDERS = ['raw', 'broll', 'project', 'final'] as const;
+/** Subfolders created inside every reel folder. `trimmed` holds the hand-trimmed export. */
+export const REEL_SUBFOLDERS = ['raw', 'trimmed', 'broll', 'project', 'final'] as const;
+
 
 export const SHEET_TITLE = 'Reel Tracker';

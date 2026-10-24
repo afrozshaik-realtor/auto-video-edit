@@ -4,10 +4,11 @@
 import type { Workflow, WorkflowStep } from '../config/workflow';
 import type { Reel, ReelChecklist, Stage } from './types';
 
-export const STAGES: Stage[] = ['raw', 'working', 'completed'];
+export const STAGES: Stage[] = ['raw', 'trimmed', 'working', 'completed'];
 
 export const STAGE_LABELS: Record<Stage, string> = {
   raw: 'Raw',
+  trimmed: 'Trimmed',
   working: 'Working',
   completed: 'Completed',
 };
@@ -33,8 +34,8 @@ export function stepTickBlocker(step: WorkflowStep, reel: Reel): string | null {
 
 /**
  * The stage a reel should move to after a step is ticked or unticked,
- * or null if it stays put. Only forward auto-moves happen: ticking the
- * "starts editing" step on a Raw reel moves it to Working.
+ * or null if it stays put. Only forward auto-moves happen, as listed in
+ * workflow.stageMoves (e.g. ticking Manual trim moves Raw → Trimmed).
  */
 export function autoStageAfterStep(
   workflow: Workflow,
@@ -42,15 +43,17 @@ export function autoStageAfterStep(
   stepId: string,
   done: boolean,
 ): Stage | null {
-  if (done && stepId === workflow.startsEditingStepId && stage === 'raw') return 'working';
-  return null;
+  if (!done) return null;
+  const move = workflow.stageMoves.find((m) => m.stepId === stepId && m.from.includes(stage));
+  return move ? move.to : null;
 }
 
 /** Everything stopping "Mark reel complete". Empty means it can be completed. */
 export function completionBlockers(workflow: Workflow, reel: Reel, checklist: ReelChecklist | undefined): string[] {
   const blockers: string[] = [];
   if (reel.stage === 'completed') return ['This reel is already complete.'];
-  if (reel.stage === 'raw') blockers.push('Upload the raw clip so the AI edit can start.');
+  if (reel.stage === 'raw') blockers.push('Trim the clip by hand and mark Manual trim done.');
+  if (reel.stage === 'trimmed') blockers.push('Wait for the AI edit to start.');
   const { missing } = requiredProgress(workflow, checklist);
   if (missing.length === 1) blockers.push(`Finish “${missing[0].title}”.`);
   else if (missing.length > 1) blockers.push(`Finish ${missing.length} required steps.`);

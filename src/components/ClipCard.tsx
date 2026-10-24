@@ -37,7 +37,7 @@ export function ClipCard({ reel, business, checklist }: { reel: Reel; business?:
           {reel.tags.length > 3 && <span className="tag tag-more">+{reel.tags.length - 3}</span>}
         </span>
       )}
-      {ai && <span className={`clip-ai${reel.aiStatus === 'failed' ? ' is-failed' : ''}`}>{ai}</span>}
+      {ai && <span className={`clip-ai${reel.aiStatus === 'failed' || reel.aiStatus === 'retrim' ? ' is-failed' : ''}`}>{ai}</span>}
       <span className="clip-foot">
         <span className="clip-assignee">{reel.assignee ? shortName(reel.assignee) : 'Unassigned'}</span>
       </span>

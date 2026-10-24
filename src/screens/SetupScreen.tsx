@@ -15,8 +15,9 @@ function configSnippet(ids: AppIds): string {
   driveFolders: {
     root: '${ids.driveFolders.root}', // Reels/
     raw: '${ids.driveFolders.raw}', // Reels/01 Raw Videos/
-    working: '${ids.driveFolders.working}', // Reels/02 Working Videos/
-    completed: '${ids.driveFolders.completed}', // Reels/03 Completed Videos/
+    trimmed: '${ids.driveFolders.trimmed}', // Reels/02 Trimmed Videos/
+    working: '${ids.driveFolders.working}', // Reels/03 Working Videos/
+    completed: '${ids.driveFolders.completed}', // Reels/04 Completed Videos/
   },`;
 }
 
@@ -60,8 +61,8 @@ export function SetupScreen({ onReady }: { onReady: (ids: AppIds) => void }) {
             </p>
             <ul className="plain-list">
               <li>
-                A <code>Reels</code> folder with <code>01 Raw Videos</code>, <code>02 Working Videos</code> and{' '}
-                <code>03 Completed Videos</code>
+                A <code>Reels</code> folder with <code>01 Raw Videos</code>, <code>02 Trimmed Videos</code>,{' '}
+                <code>03 Working Videos</code> and <code>04 Completed Videos</code>
               </li>
               <li>
                 A <code>Reel Tracker</code> sheet inside it, with AM Builders, TCE and Dr Cyber already added
@@ -118,8 +119,9 @@ export function SetupScreen({ onReady }: { onReady: (ids: AppIds) => void }) {
                   ['Sheet', ids.sheetId],
                   ['Reels folder', ids.driveFolders.root],
                   ['01 Raw Videos', ids.driveFolders.raw],
-                  ['02 Working Videos', ids.driveFolders.working],
-                  ['03 Completed Videos', ids.driveFolders.completed],
+                  ['02 Trimmed Videos', ids.driveFolders.trimmed],
+                  ['03 Working Videos', ids.driveFolders.working],
+                  ['04 Completed Videos', ids.driveFolders.completed],
                 ] as const
               ).map(([label, id]) => (
                 <div key={label} className="id-row">

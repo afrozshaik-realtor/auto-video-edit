@@ -1,7 +1,8 @@
-import { useId, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { getPrompt, renderPrompt, type PromptContext } from '../config/prompts';
 import { getTool } from '../config/tools';
 import type { WorkflowStep } from '../config/workflow';
+import { slugify } from '../data/naming';
 import { stepTickBlocker } from '../data/stage';
 import type { ChecklistEntry, Reel } from '../data/types';
 import { folderUrl } from '../services/google/drive';
@@ -32,6 +33,36 @@ const FIELD_LABELS = {
   finalVideoLink: { label: 'Final video link', hint: 'Paste the Drive link to the final MP4.', open: 'Open video' },
   postedUrl: { label: 'Posted URL', hint: 'Paste the Instagram link after it’s live.', open: 'Open post' },
 } as const;
+
+/** A to-do list inside a step. Ticks are for the person working through it and aren't saved. */
+function StepChecklist({ title, items }: { title: string; items: string[] }) {
+  const id = useId();
+  const [ticked, setTicked] = useState<boolean[]>(() => items.map(() => false));
+  const done = ticked.filter(Boolean).length;
+  return (
+    <fieldset className="step-checklist">
+      <legend>
+        {title}{' '}
+        <span className="muted small">
+          {done}/{items.length}
+        </span>
+      </legend>
+      <ul>
+        {items.map((item, i) => (
+          <li key={item}>
+            <input
+              type="checkbox"
+              id={`${id}-${i}`}
+              checked={ticked[i]}
+              onChange={(e) => setTicked((t) => t.map((v, j) => (j === i ? e.target.checked : v)))}
+            />
+            <label htmlFor={`${id}-${i}`}>{item}</label>
+          </li>
+        ))}
+      </ul>
+    </fieldset>
+  );
+}
 
 export function StepItem(p: Props) {
   const { step, index, reel, entry, open } = p;
@@ -87,6 +118,20 @@ export function StepItem(p: Props) {
           </p>
 
           {p.panel}
+
+          {step.checklists?.map((list) => <StepChecklist key={list.title} title={list.title} items={list.items} />)}
+
+          {step.saveTo && (
+            <div className="save-to">
+              <p>
+                Save the export in the reel’s <code>{step.saveTo.folder}</code> folder as:
+              </p>
+              <div className="input-row">
+                <code className="save-to-name">{step.saveTo.fileName.replace('{{slug}}', slugify(reel.title))}</code>
+                <CopyButton text={step.saveTo.fileName.replace('{{slug}}', slugify(reel.title))} label="Copy file name" />
+              </div>
+            </div>
+          )}
 
           {blockPrompts.map((prompt) => {
             const text = renderPrompt(prompt!, p.promptContext);

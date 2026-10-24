@@ -82,6 +82,7 @@ export function ReelScreen() {
 
   const stageFolder: Record<Stage, string> = {
     raw: DRIVE_FOLDER_NAMES.raw,
+    trimmed: DRIVE_FOLDER_NAMES.trimmed,
     working: DRIVE_FOLDER_NAMES.working,
     completed: DRIVE_FOLDER_NAMES.completed,
   };
@@ -115,7 +116,7 @@ export function ReelScreen() {
             {reel.assignee ? `Assigned to ${shortName(reel.assignee)}` : 'Unassigned'}
           </span>
           {aiLine && (
-            <span className={`ai-chip${reel.aiStatus === 'failed' ? ' is-failed' : ''}`}>
+            <span className={`ai-chip${reel.aiStatus === 'failed' || reel.aiStatus === 'retrim' ? ' is-failed' : ''}`}>
               {reel.aiStatus === 'running' && <span className="ai-dot" aria-hidden="true" />}
               {aiLine}
             </span>

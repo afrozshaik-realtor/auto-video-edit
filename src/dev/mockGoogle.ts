@@ -7,9 +7,11 @@
 //   ...&user=sam                           sign in as a different teammate
 //   ...&reset                              wipe the fake Drive
 
-import { DRIVE_FOLDER_NAMES, REEL_SUBFOLDERS, SEED_BUSINESSES } from '../config/defaults';
+import { DRIVE_FOLDER_NAMES, OLD_DRIVE_FOLDER_NAMES, REEL_SUBFOLDERS, SEED_BUSINESSES } from '../config/defaults';
 import { workflow } from '../config/workflow';
+import { TRIMMED_FOLDER_KEY } from '../data/repo';
 import { SCHEMA_VERSION, TABS, businessToRecord, recordToRow } from '../data/schema';
+import type { Stage } from '../data/types';
 
 const STORE_KEY = 'reel-studio.mock-store';
 const IDS_KEY = 'reel-studio.ids';
@@ -148,6 +150,8 @@ async function handle(method: string, url: URL, init: RequestInit | undefined, u
       return new Response(Uint8Array.from(bin, (c) => c.charCodeAt(0)), { status: 200 });
     }
     if (method === 'PATCH') {
+      const rename = (body as { name?: string } | undefined)?.name;
+      if (rename) f.name = rename;
       const add = url.searchParams.get('addParents');
       const remove = (url.searchParams.get('removeParents') ?? '').split(',').filter(Boolean);
       f.parents = f.parents.filter((x) => !remove.includes(x));
@@ -201,7 +205,8 @@ async function handle(method: string, url: URL, init: RequestInit | undefined, u
   return err(400, `Mock doesn’t handle ${method} ${p}`);
 }
 
-let schemaV1 = false;
+/** ?seed&v1 or ?seed&v3: an older sheet and Drive layout, to test the migrations. */
+let oldSchema: number | null = null;
 let noHeartbeat = false;
 
 function seed() {
@@ -212,15 +217,18 @@ function seed() {
     s.files[f.id] = f;
     return f.id;
   };
+  // Before schema 4 there was no Trimmed stage and the folders were numbered 01–03.
+  const pre4 = oldSchema !== null && oldSchema < 4;
   const root = mk(DRIVE_FOLDER_NAMES.root, 'root');
   const folders = {
     root,
     raw: mk(DRIVE_FOLDER_NAMES.raw, root),
-    working: mk(DRIVE_FOLDER_NAMES.working, root),
-    completed: mk(DRIVE_FOLDER_NAMES.completed, root),
+    trimmed: pre4 ? '' : mk(DRIVE_FOLDER_NAMES.trimmed, root),
+    working: mk(pre4 ? OLD_DRIVE_FOLDER_NAMES.working : DRIVE_FOLDER_NAMES.working, root),
+    completed: mk(pre4 ? OLD_DRIVE_FOLDER_NAMES.completed : DRIVE_FOLDER_NAMES.completed, root),
   };
   const sheetId = newId(s, 'sht_');
-  const v1 = schemaV1; // ?seed&v1: an old sheet, to test the migration
+  const v1 = oldSchema === 1; // only 14 Reels columns
   const reelHeaders = v1 ? TABS.Reels.slice(0, 14) : [...TABS.Reels];
   const reels: string[][] = [reelHeaders];
   const checklist: string[][] = [[...TABS.Checklist]];
@@ -229,20 +237,30 @@ function seed() {
   const thumbPrompt = 'Keep the person from the reference photo exactly. Vertical 9:16 cover, headline "Permit first" in bold white on orange.';
   const caption = 'Three things nobody tells you before your first offer.\n\n#realestate #firsttimebuyer #homebuying';
   // [title, business, tags, stage, assignee, steps done, ai_status, ai_detail]
-  const demo: [string, string, string, 'raw' | 'working' | 'completed', string, number, string, string][] = [
-    ['First-time buyer mistakes', 'tce', 'buyers, tips', 'raw', 'afroz@example.com', 1, '', ''],
+  // Steps (workflow v5): shoot, upload, manual-trim, ai-edit, ai-caption, ai-thumbnail, polish, phone-check, post.
+  const retrimDetail = '00:12.4 — “permit” sounds clipped at the cut\n00:31.0 — cut lands inside a breath';
+  const demoRows: [string, string, string, Stage, string, number, string, string][] = [
+    ['First-time buyer mistakes', 'tce', 'buyers, tips', 'raw', 'afroz@example.com', 2, '', ''],
     ['Is your basement legal? Permits 101', 'amb', 'permits, basements', 'raw', 'sam@example.com', 0, '', ''],
-    ['Phishing red flags in 30 seconds', 'drc', 'email, tips', 'working', 'sam@example.com', 2, 'running', 'Pass 02: cut-out 40%'],
-    ['Walkout basement before and after', 'amb', 'basements, before-after', 'working', 'afroz@example.com', 5, 'done', 'Finished edit 1'],
-    ['What closing costs really include', 'tce', 'buyers, money', 'working', 'afroz@example.com', 2, 'failed', 'The AI editor ran out of turns.'],
+    ['Home inspection red flags', 'tce', 'buyers, tips', 'trimmed', 'sam@example.com', 3, '', ''],
+    ['Phishing red flags in 30 seconds', 'drc', 'email, tips', 'working', 'sam@example.com', 3, 'running', 'Pass 03: captions 50%'],
+    ['Walkout basement before and after', 'amb', 'basements, before-after', 'working', 'afroz@example.com', 6, 'done', 'Finished edit 1'],
+    ['Two-factor codes, explained', 'drc', 'passwords, tips', 'trimmed', 'afroz@example.com', 2, 'retrim', retrimDetail],
+    ['What closing costs really include', 'tce', 'buyers, money', 'working', 'afroz@example.com', 3, 'failed', 'The AI editor ran out of turns.'],
     ['Password managers explained', 'drc', 'passwords, tips', 'completed', 'sam@example.com', workflow.steps.length, 'done', 'Finished edit 1'],
     ['Pre-approval vs pre-qualification', 'tce', 'buyers, money', 'completed', 'afroz@example.com', workflow.steps.length, 'done', 'Finished edit 2'],
   ];
+  // An older sheet had no Trimmed stage or re-trim status.
+  const demo = demoRows.map(([t, b, tg, stage, a, n, ai, d]) =>
+    pre4 && stage === 'trimmed'
+      ? ([t, b, tg, 'raw', a, Math.min(n, 2), ai === 'retrim' ? '' : ai, ai === 'retrim' ? '' : d] as typeof demoRows[number])
+      : ([t, b, tg, stage, a, n, ai, d] as typeof demoRows[number]),
+  );
   demo.forEach(([title, biz, tags, stage, assignee, doneCount, aiStatus, aiDetail], i) => {
     const id = `r-demo${i}`;
     const date = new Date(2026, 9, 10 + i);
     const folder = mk(`2026-10-${10 + i}_${biz.toUpperCase()}_${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, folders[stage]);
-    for (const sub of REEL_SUBFOLDERS) mk(sub, folder);
+    for (const sub of REEL_SUBFOLDERS) if (!(pre4 && sub === 'trimmed')) mk(sub, folder);
     const iso = date.toISOString();
     const finished = aiStatus === 'done';
     const row = [
@@ -251,14 +269,14 @@ function seed() {
       stage === 'completed' ? 'https://www.instagram.com/reel/demo' : '', stage === 'completed' ? '2026-10-18' : '', '',
     ];
     if (!v1) {
-      // Demo 3 has a finished thumbnail; demo 5 shows the "no OpenAI key yet" failure.
+      // Demo 4 has a finished thumbnail; demo 7 shows the "no OpenAI key yet" failure.
       let thumb = ['', '', '', '', ''];
       const finalFolder = Object.values(s.files).find((f) => f.parents[0] === folder && f.name === 'final');
-      if (i === 3 && finalFolder) {
+      if (i === 4 && finalFolder) {
         const tid = newId(s, 'fil_');
         s.files[tid] = { id: tid, name: 'thumbnail.png', mimeType: 'image/png', parents: [finalFolder.id], content: demoThumbB64 };
         thumb = [`https://drive.google.com/file/d/${tid}/view`, 'done', 'Made thumbnail.png', thumbPrompt, ''];
-      } else if (i === 5) {
+      } else if (i === 7) {
         thumb = ['', 'failed', 'No OpenAI API key yet. Add the OPENAI_API_KEY secret, then click “Make a new thumbnail”.', thumbPrompt, ''];
       }
       row.push(aiStatus, aiDetail, aiStatus ? new Date().toISOString() : '', finished ? '1' : '', '', finished ? caption : '', ...thumb);
@@ -274,7 +292,8 @@ function seed() {
     Activity: [[...TABS.Activity]],
     Meta: [
       [...TABS.Meta],
-      ['schema_version', v1 ? '1' : String(SCHEMA_VERSION)],
+      ['schema_version', String(oldSchema ?? SCHEMA_VERSION)],
+      ...(pre4 ? [] : [[TRIMMED_FOLDER_KEY, folders.trimmed]]),
       // ?seed&nocheck: the AI editor has never checked in.
       ...(noHeartbeat ? [] : [['ai_last_check', new Date(Date.now() - 4 * 60000).toISOString()]]),
     ],
@@ -292,7 +311,7 @@ export function installMockGoogle() {
     localStorage.removeItem(STORE_KEY);
     localStorage.removeItem(IDS_KEY);
   }
-  schemaV1 = params.has('v1');
+  oldSchema = params.has('v1') ? 1 : params.has('v3') ? 3 : null;
   noHeartbeat = params.has('nocheck');
   if (params.has('seed') && !localStorage.getItem(STORE_KEY)) seed();
 

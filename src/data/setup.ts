@@ -4,6 +4,7 @@ import type { AppIds } from '../config/app.config';
 import { DRIVE_FOLDER_NAMES, SEED_BUSINESSES, SHEET_TITLE } from '../config/defaults';
 import * as drive from '../services/google/drive';
 import * as sheets from '../services/google/sheets';
+import { TRIMMED_FOLDER_KEY } from './repo';
 import { SCHEMA_VERSION, TABS, businessToRecord, recordToRow, type TabName } from './schema';
 
 export type SetupStep = 'folders' | 'sheet' | 'seed' | 'file';
@@ -19,6 +20,7 @@ export async function runSetup(onStep: (step: SetupStep) => void): Promise<AppId
   onStep('folders');
   const root = await drive.createFolder(DRIVE_FOLDER_NAMES.root);
   const raw = await drive.createFolder(DRIVE_FOLDER_NAMES.raw, root.id);
+  const trimmed = await drive.createFolder(DRIVE_FOLDER_NAMES.trimmed, root.id);
   const working = await drive.createFolder(DRIVE_FOLDER_NAMES.working, root.id);
   const completed = await drive.createFolder(DRIVE_FOLDER_NAMES.completed, root.id);
 
@@ -32,7 +34,13 @@ export async function runSetup(onStep: (step: SetupStep) => void): Promise<AppId
   await sheets.batchWrite(spreadsheetId, [
     ...headerWrites,
     { range: 'Businesses!A2', values: businessRows },
-    { range: 'Meta!A2', values: [['schema_version', String(SCHEMA_VERSION)]] },
+    {
+      range: 'Meta!A2',
+      values: [
+        ['schema_version', String(SCHEMA_VERSION)],
+        [TRIMMED_FOLDER_KEY, trimmed.id],
+      ],
+    },
   ]);
 
   // Keeping the sheet in the Reels folder means sharing that one folder shares everything.
@@ -41,6 +49,6 @@ export async function runSetup(onStep: (step: SetupStep) => void): Promise<AppId
 
   return {
     sheetId: spreadsheetId,
-    driveFolders: { root: root.id, raw: raw.id, working: working.id, completed: completed.id },
+    driveFolders: { root: root.id, raw: raw.id, trimmed: trimmed.id, working: working.id, completed: completed.id },
   };
 }

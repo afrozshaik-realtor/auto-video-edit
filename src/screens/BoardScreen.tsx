@@ -14,7 +14,8 @@ let lastFilters: ReelFilters = EMPTY_FILTERS;
 
 const EMPTY_TEXT: Record<Stage, string> = {
   raw: 'No reels in Raw.',
-  working: 'No reels in Working. Start one from Raw.',
+  trimmed: 'No reels in Trimmed. Trim a Raw reel by hand and mark Manual trim done.',
+  working: 'No reels in Working. The AI edit moves Trimmed reels here when it starts.',
   completed: 'Nothing completed yet. Finish one from Working.',
 };
 

@@ -1,7 +1,10 @@
-export type Stage = 'raw' | 'working' | 'completed';
+export type Stage = 'raw' | 'trimmed' | 'working' | 'completed';
 
-/** Where the automated AI edit is for a reel. Empty means it hasn't been picked up yet. */
-export type AiStatus = '' | 'queued' | 'running' | 'done' | 'failed';
+/**
+ * Where the automated AI edit is for a reel. Empty means it hasn't been picked up yet.
+ * 'retrim' means Pass 01 found a bad cut in the hand-trimmed clip and the edit stopped.
+ */
+export type AiStatus = '' | 'queued' | 'running' | 'done' | 'failed' | 'retrim';
 
 export interface Reel {
   id: string;

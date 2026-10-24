@@ -4,7 +4,10 @@
 // migration must be safe to run twice (two people may load at once).
 
 import type { AppIds } from '../config/app.config';
+import { DRIVE_FOLDER_NAMES, OLD_DRIVE_FOLDER_NAMES } from '../config/defaults';
+import * as drive from '../services/google/drive';
 import * as sheets from '../services/google/sheets';
+import { loadAll, setMeta, TRIMMED_FOLDER_KEY } from './repo';
 import { SCHEMA_VERSION, TABS, type TabName } from './schema';
 
 interface Migration {
@@ -36,7 +39,41 @@ export const MIGRATIONS: Record<number, Migration> = {
     description: 'Add AI thumbnail columns to Reels',
     run: (ids) => addMissingColumns(ids, 'Reels'),
   },
+  4: {
+    description: 'Add the Trimmed stage folder and a trimmed/ subfolder in each active reel',
+    run: addTrimmedStage,
+  },
 };
+
+/**
+ * Schema 4: Raw → Trimmed → Working → Completed. Creates "02 Trimmed Videos" (or reuses
+ * one that's already there) and stores its ID in Meta, renumbers the Working and
+ * Completed folder names, and gives every active reel a trimmed/ subfolder.
+ * Only creates and renames; never moves or deletes anything.
+ */
+async function addTrimmedStage(ids: AppIds) {
+  const data = await loadAll(ids);
+  const root = ids.driveFolders.root;
+  if (!root) return; // No Reels folder ID on this device: nothing we can safely do.
+
+  if (!ids.driveFolders.trimmed && !data.meta[TRIMMED_FOLDER_KEY]) {
+    const existing = await drive.findChildFolder(root, DRIVE_FOLDER_NAMES.trimmed);
+    const folder = existing ?? (await drive.createFolder(DRIVE_FOLDER_NAMES.trimmed, root));
+    await setMeta(ids, TRIMMED_FOLDER_KEY, folder.id);
+  }
+
+  for (const stage of ['working', 'completed'] as const) {
+    const id = ids.driveFolders[stage];
+    if (!id) continue;
+    const folder = await drive.getFile(id);
+    if (folder.name === OLD_DRIVE_FOLDER_NAMES[stage]) await drive.renameFile(id, DRIVE_FOLDER_NAMES[stage]);
+  }
+
+  for (const reel of data.reels) {
+    if (reel.stage === 'completed' || !reel.driveFolderId) continue;
+    if (!(await drive.findChildFolder(reel.driveFolderId, 'trimmed'))) await drive.createFolder('trimmed', reel.driveFolderId);
+  }
+}
 
 async function setSchemaVersion(ids: AppIds, version: number) {
   const rows = await sheets.readTab(ids.sheetId, 'Meta');

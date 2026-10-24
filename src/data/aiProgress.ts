@@ -16,13 +16,11 @@ export interface AiStage {
 
 export const AI_STAGES: AiStage[] = [
   { label: 'Getting ready', match: ['getting ready', 'downloading', 'starting', 'retrying'], weight: 2 },
-  { label: 'Trim', match: ['trim'], weight: 3 },
-  { label: 'Pass 01: transcribe', match: ['pass 01'], weight: 8 },
-  { label: 'Tighten the cut', match: ['tighten'], weight: 4 },
-  { label: 'Pass 02: cut-out', match: ['pass 02'], weight: 18 },
+  { label: 'Pass 01: transcribe', match: ['pass 01'], weight: 10 },
+  { label: 'Pass 02: cut-out', match: ['pass 02'], weight: 19 },
+  { label: 'Pass 03: captions', match: ['pass 03'], weight: 8 },
   { label: 'B-roll: shot list', match: ['b-roll: shot', 'b-roll shot'], weight: 4 },
   { label: 'B-roll: build and mix', match: ['b-roll: build', 'b-roll build', 'b-roll: mix'], weight: 14 },
-  { label: 'Pass 03: captions', match: ['pass 03'], weight: 8 },
   { label: 'Pass 04: motion', match: ['pass 04'], weight: 14 },
   { label: 'Pass 05: sound', match: ['pass 05'], weight: 6 },
   { label: 'Director review', match: ['director'], weight: 8 },

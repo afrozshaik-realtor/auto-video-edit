@@ -7,7 +7,8 @@ import type { ActivityEntry, AiStatus, Business, ChecklistEntry, Reel, Stage, Ta
 
 // v2: Reels gained ai_status, ai_detail, ai_updated_at, ai_runs, ai_notes, caption.
 // v3: Reels gained thumbnail_link, thumb_status, thumb_detail, thumb_prompt, thumb_notes.
-export const SCHEMA_VERSION = 3;
+// v4: Trimmed stage (folder ID in Meta.trimmed_folder_id); no new columns.
+export const SCHEMA_VERSION = 4;
 
 export const TABS = {
   Reels: [
@@ -26,8 +27,8 @@ export const TABS = {
 export type TabName = keyof typeof TABS;
 export type RowRecord = Record<string, string>;
 
-const STAGES: Stage[] = ['raw', 'working', 'completed'];
-const AI_STATUSES: AiStatus[] = ['', 'queued', 'running', 'done', 'failed'];
+const STAGES: Stage[] = ['raw', 'trimmed', 'working', 'completed'];
+const AI_STATUSES: AiStatus[] = ['', 'queued', 'running', 'done', 'failed', 'retrim'];
 
 function bool(v: string | undefined): boolean {
   return (v ?? '').trim().toUpperCase() === 'TRUE';

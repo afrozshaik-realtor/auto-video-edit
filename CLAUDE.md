@@ -56,21 +56,28 @@ Businesses must be data, not hard-coded, so more can be added later.
 ```
 Reels/
   01 Raw Videos/
-  02 Working Videos/
-  03 Completed Videos/
+  02 Trimmed Videos/
+  03 Working Videos/
+  04 Completed Videos/
 ```
 
 - Every reel gets its own subfolder, named `YYYY-MM-DD_<BUSINESS>_<slug>`
   (e.g. `2026-10-21_TCE_first-time-buyer-mistakes`).
 - The reel folder starts in Raw. Moving a reel between stages moves its whole folder
   (Drive API: update `parents`). Never copy, never delete.
-- Inside the reel folder, the app creates: `raw/`, `broll/` (stock and own-footage
+- Inside the reel folder, the app creates: `raw/` (the original clip), `trimmed/`
+  (the hand-trimmed export, `<reel-slug>_trimmed.mp4`), `broll/` (stock and own-footage
   B-roll clips), `project/` (words.json, matte, renders from Claude), `final/`
   (final MP4 + cover frame).
+- The Trimmed Videos folder was added in schema 4: its ID is in the sheet's Meta tab
+  (`trimmed_folder_id`) rather than `app.config.ts`; `repo.withMetaIds` fills it in.
 
 ### Stage rules
 - **Raw**: reel created, raw clip uploaded.
+- **Trimmed**: moves automatically when a person marks Manual trim done (the trimmed
+  export is in the reel's `trimmed/` folder). The AI edit starts from here.
 - **Working**: moves automatically when the AI edit job starts on the reel.
+- Stage moves on ticked steps are data: `workflow.stageMoves` in `workflow.ts`.
 - **Completed**: moves when every required step is ticked and the user clicks
   "Mark reel complete" (show a confirmation). The posted URL is required.
 - A reel can be moved back a stage with a confirmation (e.g. re-edit needed).
@@ -79,16 +86,17 @@ Reels/
 
 - `Reels`: id, title, business, tags (comma-separated), stage, assignee, created_by,
   created_at, updated_at, drive_folder_id, final_video_link, posted_url, post_date,
-  notes, ai_status (blank / queued / running / done / failed), ai_detail, ai_updated_at,
+  notes, ai_status (blank / queued / running / done / failed / retrim), ai_detail, ai_updated_at,
   ai_runs, ai_notes (notes for a re-run), caption (written by the AI edit),
   thumbnail_link, thumb_status (same values as ai_status), thumb_detail, thumb_prompt
   (Claude's image prompt), thumb_notes (notes for a thumbnail redo).
-  Schema version 2 added the ai_* and caption columns; version 3 the thumbnail ones.
+  Schema version 2 added the ai_* and caption columns; version 3 the thumbnail ones;
+  version 4 the Trimmed stage (Drive folder + Meta key, no new columns).
 - `Checklist`: reel_id, step_id, done (TRUE/FALSE), done_by, done_at, note
 - `Businesses`: id, name, short_code, accent_color, style_rules_md, active
 - `Tags`: tag, color (optional)
 - `Activity`: timestamp, user, reel_id, action, detail
-- `Meta`: key, value (`schema_version`; `ai_last_check`, written by the AI edit job on
+- `Meta`: key, value (`schema_version`; `trimmed_folder_id`; `ai_last_check`, written by the AI edit job on
   every check so the app can show whether the editor is alive)
 
 Schema changes must ship with a migration function in `src/data/migrations.ts`,
@@ -110,30 +118,49 @@ reordered or edited without touching UI code. Each step has: id, title, who
 (Claude / You / Both), required (bool), instructions (short, plain language),
 tool buttons, a "done when" line, and optionally `auto` (ticked by the AI edit job,
 not people) and a `panel` (AI status, caption, thumbnail, or review). Workflow
-version 4: nobody copies or pastes prompts.
+version 5: trimming is done by hand; nobody copies or pastes prompts; the AI never cuts
+footage.
 
 | # | Step | Who | Done by | Tool buttons |
 |---|---|---|---|---|
-| 1 | Shoot: headroom above head, clean background, clear audio (no trimming needed) | You | Person | — |
-| 2 | Upload the raw clip to the reel's `raw/` folder (own B-roll footage to `broll/`) | You | Person (or the job, when it finds the clip) | Open reel folder (Drive) |
-| 3 | AI edit: trim, Pass 01–02, B-roll plan and mix, Pass 03–05, director self-review, save | Claude | AI edit job | Open reel folder (Drive) |
-| 4 | AI caption and hashtags (shown with a Copy caption button) | Claude | AI edit job | — |
-| 5 | AI thumbnail: Claude picks a reference frame and writes the image prompt; OpenAI's image model draws a 9:16 cover (preview in the app; "Make a new thumbnail" with optional notes redoes only the thumbnail) | Claude | AI edit job | — |
-| 6 | Optional polish (manual fixes, brand assets) | You | Person | CapCut, Canva |
-| 7 | Phone check: sound on and off, nothing under Instagram buttons, loudness OK. Director note chips add notes; "Re-run AI edit with these notes" queues a new version | You | Person | — |
-| 8 | Post (with the thumbnail as cover) and paste the posted URL | You | Person | Instagram |
+| 1 | Film: headroom above head, clean background, clear audio | You | Person | — |
+| 2 | Upload the raw clip to the reel's `raw/` folder (own B-roll footage to `broll/`) | You | Person | Open reel folder (Drive) |
+| 3 | Manual trim: trim checklist and export-settings checklist (see below); export to `trimmed/<slug>_trimmed.mp4`; "Mark done" moves Raw → Trimmed | You | Person | CapCut, Open reel folder (Drive) |
+| 4 | AI edit on the trimmed clip as-is: Pass 01 transcribe (stops for a re-trim if it finds a bad cut), Pass 02 cut-out, Pass 03 captions, B-roll shot list then build and mix, Pass 04 motion, Pass 05 sound, director self-review, save | Claude | AI edit job | Open reel folder (Drive) |
+| 5 | AI caption and hashtags (shown with a Copy caption button) | Claude | AI edit job | — |
+| 6 | AI thumbnail: Claude picks a reference frame and writes the image prompt; OpenAI's image model draws a 9:16 cover (preview in the app; "Make a new thumbnail" with optional notes redoes only the thumbnail) | Claude | AI edit job | — |
+| 7 | Optional polish (manual fixes, brand assets) | You | Person | CapCut, Canva |
+| 8 | Phone check: sound on and off, nothing under Instagram buttons, loudness OK. Director note chips add notes; "Re-run AI edit with these notes" queues a new version | You | Person | — |
+| 9 | Post (with the thumbnail as cover) and paste the posted URL | You | Person | Instagram |
 
-Required steps: all except 6 (7 required).
+Required steps: all except 7 (8 required).
+
+Manual trim checklists (data in `workflow.ts`, ticks not saved):
+- Trim: cut filler words, false starts, repeated takes and dead air, on the silence or
+  breath between words, never inside a word; keep ~0.15–0.25 s of pause between
+  sentences and keep the breaths; leave ~0.3 s of quiet at the very end; hard cuts only
+  (the Motion pass hides jump cuts with punch-ins).
+- Export settings: native vertical 1080x1920 (or 4K vertical) from the original clip,
+  never letterboxed in 16:9; constant 30 fps, highest quality; no captions, music,
+  zooms, filters, colour grading, noise reduction or volume levelling (Pass 05 masters
+  the audio).
+
+Trimming rule for every prompt: no prompt asks Claude to cut, trim or tighten footage
+(the old "Tighten the cut" prompt is gone). Pass 01 is the user's exact text. Every pass
+after Pass 01 (02, 03, B-roll plan, B-roll mix, 04, 05) starts with `AS_IS_LINE`:
+"Work on the manually trimmed clip as-is. Never re-trim or remove footage."
 
 ### AI edit job
 - `.github/workflows/ai-edit.yml` runs every 10 minutes (and on demand). A quick check
   step looks for work; video tools and Claude Code are only installed when there is some.
 - `automation/run-ai-edit.ts` picks the next reel: queued reels first (a re-run or "start
-  now"), then reels that have never been edited and have a video in `raw/`, then
+  now"), then Trimmed or Working reels that have never been edited and have a video in
+  `trimmed/` (Raw reels wait for the manual trim), then
   "running" reels with no update for 5 hours (crashed). Failed reels wait for a person
   to click "Try the AI edit again".
-- For each reel it sets ai_status=running, moves the folder to Working, ticks Upload,
-  unticks the AI steps and the phone check, downloads the clip and `broll/` files, and
+- For each reel it sets ai_status=running, moves the folder to Working, ticks Upload and
+  Manual trim, unticks the AI steps and the phone check, downloads the newest video in
+  `trimmed/` and the `broll/` files, and
   runs Claude Code headless with the single prompt from `src/data/aiEdit.ts`
   (`buildAiEditPrompt`). Claude writes its current step heading (plus a rough
   percentage during long steps, e.g. "Pass 02: cut-out 40%") to `status.txt`, which the
@@ -175,8 +202,12 @@ B-roll rules (in the B-roll prompts):
   trigger word.
 - Layouts: full-screen cutaway (voice continues), split screen, picture-in-picture,
   behind the cut-out (uses the Pass 02 matte).
-- The B-roll pass runs after Pass 02 (needs the matte) and before Pass 03 (captions
-  are placed on the final cut).
+- The B-roll pass runs after Pass 02 (needs the matte) and after Pass 03 (Afroz's order,
+  2026-10-23): shots are placed around the existing captions and never cover a key word.
+- Re-trim: if Pass 01 flags a clipped word or a cut inside a word or breath, Claude writes
+  `out/retrim.txt` and stops. The job sets ai_status=retrim with the timecodes in
+  ai_detail, moves the reel back to Trimmed and unticks Manual trim. Marking Manual trim
+  done again queues the AI edit (`repo.setStepDone`).
 
 Kit troubleshooting tips (the runner has internet, so the AI edit can follow them):
 - Pass 01: if a speech model won't download, use a Whisper or Parakeet model from the
@@ -195,9 +226,9 @@ All open in a new tab.
 
 ## Screens
 
-1. **Board** (home): three lanes — Raw, Working, Completed — styled like tracks on an
+1. **Board** (home): four lanes — Raw, Trimmed, Working, Completed — styled like tracks on an
    editing timeline, with each reel as a clip on its track. Clip shows title,
-   business color, tags, assignee, progress (x/7 required steps), and the AI edit
+   business color, tags, assignee, progress (x/8 required steps), and the AI edit
    or thumbnail status when queued, running or failed. Completed lane collapsed by default, showing
    the 10 most recent.
 2. **Filters** (on Board): business, tags (multi-select, match any/all), stage,
@@ -282,6 +313,9 @@ moving correctly, on desktop and phone, by two different signed-in team members.
 migrations framework (`src/data/migrations.ts`).
 
 **AI thumbnail (0.4.0)**: thumbnail step with OpenAI images, workflow v4, schema v3.
+
+**Manual trim (0.5.0)**: Manual trim step and Trimmed stage, workflow v5, schema v4; the AI
+never cuts footage.
 
 **Phase 2**: Settings (businesses, tags, tools, team), Library, activity history,
 URL-synced filters, dark mode polish, more tests for workflow logic.
